@@ -46,7 +46,7 @@ class Trainer:
         Trains the model and presents the train/test progress.
         """
         # train hyperparameters
-        total_epoch = 200
+        total_epoch =20
         warmup_epoch = 5
         init_lr = 1e-1
         lr_lower_limit = 0
@@ -92,9 +92,10 @@ class Trainer:
                 valid_acc = self.Test(self.valid_dataset, self.valid_loader, augment=True)
                 print("valid acc: %.3f" % (valid_acc))
 
-        test_acc = self.Test(self.test_dataset, self.test_loader, augment=False)  # official testset
+        test_acc = self.Test(self.test_dataset, self.test_loader, augment=True)  # official testset
         print("test acc: %.3f" % (test_acc))
         print("End.")
+        self.save_model(self.model) 
 
     def Test(self, dataset, loader, augment):
         """
@@ -119,6 +120,17 @@ class Trainer:
             true_count += torch.sum(prediction == labels).detach().cpu().numpy()
         acc = true_count / num_testdata * 100.0  # percentage
         return acc
+
+    def save_model(self, model):
+        import torch
+        import time
+        month=['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][time.localtime().tm_mon-1]
+        date=time.localtime().tm_mday
+        today=f'{month}{date}'
+        time=f'{time.localtime().tm_hour}{time.localtime().tm_min}'
+        file_name=f'model_{today}_{time}.pt'
+        torch.save(model, file_name)
+        print('model saved : ', file_name)
 
     def _load_data(self):
         """
@@ -152,16 +164,17 @@ class Trainer:
         train_dir = "%s/train_12class" % base_dir
         valid_dir = "%s/valid_12class" % base_dir
         noise_dir = "%s/_background_noise_" % base_dir
+        batch_size=250
 
         transform = transforms.Compose([Padding()])
         self.train_dataset = SpeechCommand(train_dir, self.ver, transform=transform)
         self.train_loader = DataLoader(
-            self.train_dataset, batch_size=100, shuffle=True, num_workers=0, drop_last=False
+            self.train_dataset, batch_size=batch_size, shuffle=True, num_workers=0, drop_last=False
         )
         self.valid_dataset = SpeechCommand(valid_dir, self.ver, transform=transform)
-        self.valid_loader = DataLoader(self.valid_dataset, batch_size=100, num_workers=0)
+        self.valid_loader = DataLoader(self.valid_dataset, batch_size=batch_size, num_workers=0)
         self.test_dataset = SpeechCommand(test_dir, self.ver, transform=transform)
-        self.test_loader = DataLoader(self.test_dataset, batch_size=100, num_workers=0)
+        self.test_loader = DataLoader(self.test_dataset, batch_size=batch_size, num_workers=0)
 
         print(
             "check num of data train/valid/test %d/%d/%d"
@@ -188,6 +201,11 @@ class Trainer:
         self.model = BCResNets(int(self.tau * 8)).to(self.device)
 
 
+
 if __name__ == "__main__":
     _trainer = Trainer()
     _trainer()
+    torch.save(_trainer.model.state_dict(),"model_params.pth")
+    print("params saved")
+    torch.save(_trainer.model, "model.pth")
+    print("model saved")
