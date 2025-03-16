@@ -148,7 +148,7 @@ def BCBlockStage(num_layers, last_channel, cur_channel, idx, use_stride, bitwidt
     channels = [last_channel] + [cur_channel] * num_layers
     for i in range(num_layers):
         stride = (2, 1) if use_stride and i == 0 else (1, 1)
-        stage.append(BCResBlock(channels[i], channels[i + 1], idx, stride, bitwidth))
+        stage.append(BCResBlock(in_plane=channels[i], out_plane=channels[i + 1], idx=idx, stride=stride, bitwidth=bitwidth))
     return stage
 
 
