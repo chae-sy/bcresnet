@@ -37,6 +37,7 @@ class ConvBNReLU(nn.Module):
 
         self.idx = idx
         self.bitwidth = bitwidth
+        self.act=False # default= False
         # padding and dilation rate
         if isinstance(kernel_size, (list, tuple)):
             padding = []
