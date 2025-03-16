@@ -191,7 +191,7 @@ class BCResNets(nn.Module):
 
         # Classifier
         self.classifier = nn.Sequential(
-            Conv2d(self.c[-2], self.c[-2], (5, 5), bias=False, groups=self.c[-2], padding=(0, 2), bitwidth=self.bitwidth),
+            Conv2d(self.c[-2], self.c[-2], (5, 5), bias=False, groups=self.c[-2], padding=(0, 4), bitwidth=self.bitwidth),
             Conv2d(self.c[-2], self.c[-1], 1, bias=False, bitwidth=self.bitwidth),
             nn.BatchNorm2d(self.c[-1]),)
         
