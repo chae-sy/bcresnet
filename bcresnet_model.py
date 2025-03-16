@@ -68,11 +68,13 @@ class ConvBNReLU(nn.Module):
         self.apply(_weights_init)
 
     def forward(self, x):
+        print(f"ConvBNReLU Input: {x.shape}")  # Debug print
         x = self.block(x)
         if self.act:
             self.ActFn = ActFn.apply
             self.alpha=nn.Parameter(torch.tensor(10.0))
             x = self.ActFn(x, self.alpha, self.bitwidth)
+        print(f"ConvBNReLU Output: {x.shape}")  # Debug print
         return x
         #return self.block(x)
 
@@ -123,6 +125,7 @@ class BCResBlock(nn.Module):
         self.apply(_weights_init)
 
     def forward(self, x):
+        print(f"BCResBlock Input: {x.shape}")  # Debug print
         # 2D part
         shortcut = x
         x = self.f2(x)
@@ -138,6 +141,7 @@ class BCResBlock(nn.Module):
         self.ActFn = ActFn.apply
         self.alpha = nn.Parameter(torch.tensor(10.0))
         x = self.ActFn(x, self.alpha, self.bitwidth)
+        print(f"BCResBlock Output: {x.shape}")  # Debug print
         return x
     
         # x = F.relu(x, True)
@@ -203,20 +207,26 @@ class BCResNets(nn.Module):
     def forward(self, x):
         self.ActFn = ActFn.apply
         
+        print(f"Model Input: {x.shape}")  # Debug print
         self.cnn_head_alpha = nn.Parameter(torch.tensor(10.0))
         x = self.cnn_head(x)
         x= self.ActFn(x, self.cnn_head_alpha, self.bitwidth)
-        
+        print(f"After CNN Head: {x.shape}")  # Debug print
         for i, num_modules in enumerate(self.n):
             for j in range(num_modules):
                 x = self.BCBlocks[i][j](x)
+                print(f"After BCBlock {i}-{j}: {x.shape}")  # Debug print
                 
         self.classifier_alpha = nn.Parameter(torch.tensor(10.0))        
         x = self.classifier(x)
         x = self.ActFn(x, self.classifier_alpha, self.bitwidth)
+        print(f"After Classifier: {x.shape}")  # Debug print
+        
         x = self.classifier2(x)
+        print(f"After Classifier2: {x.shape}")  # Debug print
         
         x = x.view(-1, x.shape[1])
+        print(f"Final Output: {x.shape}")  # Debug print
         return x
     
 def _weights_init(m):
