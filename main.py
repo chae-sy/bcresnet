@@ -16,7 +16,7 @@ from torch.utils.data import DataLoader
 from torchvision import transforms
 from tqdm import tqdm
 
-from bcresnet import BCResNets
+from bcresnet_model import BCResNets
 from utils import DownloadDataset, Padding, Preprocess, SpeechCommand, SplitDataset
 
 
@@ -39,8 +39,12 @@ class Trainer:
         args = parser.parse_args()
         self.__dict__.update(vars(args))
         self.device = torch.device("cuda:%d" % self.gpu if torch.cuda.is_available() else "cpu")
+        
+        # set bitwdith = 8
+        K = 8
+        
         self._load_data()
-        self._load_model()
+        self._load_model(K)
 
     def __call__(self):
         """
@@ -63,6 +67,7 @@ class Trainer:
         # train
         for epoch in range(total_epoch):
             self.model.train()
+            lambda_alpha=0.0002
             for sample in tqdm(self.train_loader, desc="epoch %d, iters" % (epoch + 1)):
                 # lr cos schedule
                 iterations += 1
@@ -84,6 +89,13 @@ class Trainer:
                 inputs = self.preprocess_train(inputs, labels, augment=True)
                 outputs = self.model(inputs)
                 loss = F.cross_entropy(outputs, labels)
+                # L2 regularization
+                l2_alpha = 0.0
+                for name, param in self.model.named_parameters():
+                    if "alpha" in name:
+                        l2_alpha += torch.pow(param, 2)
+                loss += lambda_alpha * l2_alpha
+                
                 loss.backward()
                 optimizer.step()
                 self.model.zero_grad()
@@ -94,6 +106,9 @@ class Trainer:
                 self.model.eval()
                 valid_acc = self.Test(self.valid_dataset, self.valid_loader, augment=True)
                 print("valid acc: %.3f" % (valid_acc))
+            for name, param in self.model.named_parameters():
+                if "alpha" in name:
+                    print(name, param.item())
 
         test_acc = self.Test(self.test_dataset, self.test_loader, augment=True)  # official testset
         print("test acc: %.3f" % (test_acc))
@@ -196,19 +211,20 @@ class Trainer:
         )
         self.preprocess_test = Preprocess(noise_dir, self.device)
 
-    def _load_model(self):
+    def _load_model(self, K):
         """
         Private method that loads the model into the object.
         """
+        print("Bit :", K)
         print("model: BC-ResNet-%.1f on data v0.0%d" % (self.tau, self.ver))
-        self.model = BCResNets(int(self.tau * 8)).to(self.device)
+        self.model = BCResNets(int(self.tau * 8), bitwidth=K).to(self.device)
 
 
 
 if __name__ == "__main__":
     _trainer = Trainer()
     _trainer()
-    torch.save(_trainer.model.state_dict(),"model_params.pth")
-    print("params saved")
-    torch.save(_trainer.model, "model.pth")
-    print("model saved")
+    # torch.save(_trainer.model.state_dict(),"model_params.pth")
+    # print("params saved")
+    # torch.save(_trainer.model, "model.pth")
+    # print("model saved")
