@@ -176,12 +176,12 @@ class BCResNets(nn.Module):
 
     def _build_network(self,): 
         # Head: (Conv-BN-ReLU)
-        
+        #def __init__(self, in_places, out_planes, kernel_size, stride=1, padding = 0, groups=1, dilation=1, bias = False, bitwidth = 8):
+            
         self.cnn_head = nn.Sequential(
             Conv2d(1, self.c[0], 5, (2, 1), 2, bias=False, bitwidth=self.bitwidth),
             nn.BatchNorm2d(self.c[0]),
-            #nn.ReLU(True),
-            
+            #nn.ReLU(True),     
         )
         # Body: BC-ResBlocks
         self.BCBlocks = nn.ModuleList([])
@@ -191,9 +191,7 @@ class BCResNets(nn.Module):
 
         # Classifier
         self.classifier = nn.Sequential(
-            Conv2d(
-                self.c[-2], self.c[-2], (5, 5), bias=False, groups=self.c[-2], padding=(0, 2), bitwidth=self.bitwidth
-            ),
+            Conv2d(self.c[-2], self.c[-2], (5, 5), bias=False, groups=self.c[-2], padding=(0, 2), bitwidth=self.bitwidth),
             Conv2d(self.c[-2], self.c[-1], 1, bias=False, bitwidth=self.bitwidth),
             nn.BatchNorm2d(self.c[-1]),)
         
@@ -216,7 +214,7 @@ class BCResNets(nn.Module):
             for j in range(num_modules):
                 x = self.BCBlocks[i][j](x)
                 print(f"After BCBlock {i}-{j}: {x.shape}")  # Debug print
-                
+        print(self.classifier[0].weight.data.shape)        
         self.classifier_alpha = nn.Parameter(torch.tensor(10.0))        
         x = self.classifier(x)
         x = self.ActFn(x, self.classifier_alpha, self.bitwidth)
