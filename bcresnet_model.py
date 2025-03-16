@@ -109,7 +109,7 @@ class BCResBlock(nn.Module):
                 out_plane,
                 out_plane,
                 idx,
-                self.bitwidth
+                self.bitwidth,
                 (1, kernel_size[1]),
                 (1, stride[1]),
                 groups=out_plane,
