@@ -98,6 +98,7 @@ class Conv2d(nn.Conv2d):
 
 	def forward(self, x):
 		vhat = self.quantize(self.weight, self.bitwidth)
+		print("Quantized weight shape:", vhat.shape)
 		y = F.conv2d(x, vhat, self.bias, self.stride, self.padding, self.dilation, self.groups)
 		return y
 

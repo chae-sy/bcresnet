@@ -144,7 +144,7 @@ class Trainer:
         import time
         month=['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][time.localtime().tm_mon-1]
         date=time.localtime().tm_mday
-        today=f'{month}{date}'
+        today=f"{month}{date}"
         time=f'{time.localtime().tm_hour}{time.localtime().tm_min}'
         file_name=f'model_{today}_{time}.pt'
         torch.save(model, file_name)
@@ -218,6 +218,11 @@ class Trainer:
         print("Bit :", K)
         print("model: BC-ResNet-%.1f on data v0.0%d" % (self.tau, self.ver))
         self.model = BCResNets(int(self.tau * 8), bitwidth=K).to(self.device)
+        from torch import nn
+        from module import Conv2d
+        for name, module in self.model.named_modules():
+            if isinstance(module, nn.Conv2d) or isinstance(module, Conv2d):
+                print(f"Layer {name} kernel size: {module.kernel_size}")
 
 
 

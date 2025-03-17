@@ -204,7 +204,6 @@ class BCResNets(nn.Module):
 
     def forward(self, x):
         self.ActFn = ActFn.apply
-        
         print(f"Model Input: {x.shape}")  # Debug print
         self.cnn_head_alpha = nn.Parameter(torch.tensor(10.0))
         x = self.cnn_head(x)
@@ -215,6 +214,12 @@ class BCResNets(nn.Module):
                 x = self.BCBlocks[i][j](x)
                 print(f"After BCBlock {i}-{j}: {x.shape}")  # Debug print
         print(self.classifier[0].weight.data.shape)        
+        print(self.classifier[0].kernel_size)
+        print(self.classifier[1].kernel_size)
+        for idx, layer in enumerate(self.classifier):
+            if isinstance(layer, nn.Conv2d) or isinstance(layer, Conv2d):
+                print(f"Layer {idx} kernel size: {layer.kernel_size}")
+
         self.classifier_alpha = nn.Parameter(torch.tensor(10.0))        
         x = self.classifier(x)
         x = self.ActFn(x, self.classifier_alpha, self.bitwidth)
