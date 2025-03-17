@@ -38,6 +38,7 @@ class Trainer:
         self.device = torch.device("cuda:%d" % self.gpu if torch.cuda.is_available() else "cpu")
         self._load_data()
         self._load_model()
+        self._save_data(self.test_dataset, self.test_loader,augment=False )
 
     def __call__(self):
         """
@@ -121,6 +122,19 @@ class Trainer:
         acc = true_count / num_testdata * 100.0  # percentage
         return acc
 
+    def _save_data(self,dataset, loader, augment):
+        num_testdata=float(len(dataset))
+        input_tensor=[]
+        for inputs, labels in loader:
+            inputs = inputs.to(self.device)
+            labels=labels.to(self.device)
+            inputs=self.preprocess_test(inputs, labels=labels, is_train=False, augment=augment)
+            input_tensor.append(inputs)
+        output_tensor=torch.cat(input_tensor, dim=0)
+        print('test data shape: ', output_tensor.shape)
+        torch.save(output_tensor, "input_label_40,101.pt")
+        print('data saved')
+
     def save_model(self, model):
         import torch
         import time
@@ -159,7 +173,6 @@ class Trainer:
             DownloadDataset(base_dir, url)
             SplitDataset(base_dir)
             print("Done...")
-
         # Define data loaders
         train_dir = "%s/train_12class" % base_dir
         valid_dir = "%s/valid_12class" % base_dir
