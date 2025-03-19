@@ -141,7 +141,7 @@ class Trainer:
 
         output_tensor=(all_labels, all_inputs)
         print('test data shape: ', output_tensor[1].shape)
-        h,w=output_tensor[0].shape[-2], output_tensor[0].shape[-1]
+        h,w=output_tensor[1].shape[-2], output_tensor[1].shape[-1]
         torch.save(output_tensor, f"label_input_{h},{w}.pt")
         print('data saved')
 
