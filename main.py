@@ -133,19 +133,15 @@ class Trainer:
             label_tensor.append(labels)
             input_tensor.append(inputs)
             
-        length=len(label_tensor)
+        #length=len(label_tensor)
         # all_inputs=all_inputs[:length, :, :, :]
         # all_labels=all_labels[:length].view(-1, 1) 
         all_labels=torch.cat(label_tensor, dim=0)
         all_inputs=torch.cat(input_tensor, dim=0)
 
-        batch_size = min(all_labels.shape[0], all_inputs.shape[0])  # Find the smaller batch size
-        all_labels = all_labels[:batch_size].view(-1, 1)  # Reshape labels to [batch_size, 1]
-        all_inputs = all_inputs[:batch_size, :, :, :]  # Match input tensor size
-
-        output_tensor=torch.stack([all_labels, all_inputs], dim=1)
-        print('test data shape: ', output_tensor.shape)
-        h,w=input_tensor[0].shape[-2], input_tensor[0].shape[-1]
+        output_tensor=(all_labels, all_inputs)
+        print('test data shape: ', output_tensor[1].shape)
+        h,w=output_tensor[0].shape[-2], output_tensor[0].shape[-1]
         torch.save(output_tensor, f"label_input_{h},{w}.pt")
         print('data saved')
 
