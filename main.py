@@ -124,15 +124,15 @@ class Trainer:
 
     def _save_data(self,dataset, loader, augment):
         num_testdata=float(len(dataset))
-        input_tensor=[]
+        label_input_tensor=[]
         for inputs, labels in loader:
             inputs = inputs.to(self.device)
             labels=labels.to(self.device)
             inputs=self.preprocess_test(inputs, labels=labels, is_train=False, augment=augment)
-            input_tensor.append(inputs)
-        output_tensor=torch.cat(input_tensor, dim=0)
+            label_input_tensor.append((labels, inputs))
+        output_tensor=torch.cat(label_input_tensor, dim=0)
         print('test data shape: ', output_tensor.shape)
-        torch.save(output_tensor, "input_label_40,101.pt")
+        torch.save(output_tensor, "label_input_40,101.pt")
         print('data saved')
 
     def save_model(self, model):
