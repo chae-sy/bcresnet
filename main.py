@@ -132,14 +132,16 @@ class Trainer:
             inputs=self.preprocess_test(inputs, labels=labels, is_train=False, augment=augment)
             label_tensor.append(labels)
             input_tensor.append(inputs)
-        all_inputs=all_inputs[:4890, :, :, :]
-        all_labels=all_labels[:4890].view(-1, 1) #this is not flexible to any len
+            
+        length=len(label_tensor)
+        all_inputs=all_inputs[:length, :, :, :]
+        all_labels=all_labels[:length].view(-1, 1) 
         all_labels=torch.cat(label_tensor, dim=0)
         all_inputs=torch.cat(input_tensor, dim=0)
 
         output_tensor=torch.stack([all_labels, all_inputs], dim=1)
         print('test data shape: ', output_tensor.shape)
-        h,w=input_tensors[0].shape[-2], input_tensors[0].shape[-1]
+        h,w=input_tensor[0].shape[-2], input_tensor[0].shape[-1]
         torch.save(output_tensor, f"label_input_{h},{w}.pt")
         print('data saved')
 
