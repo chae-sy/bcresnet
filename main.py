@@ -47,7 +47,7 @@ class Trainer:
         Trains the model and presents the train/test progress.
         """
         # train hyperparameters
-        total_epoch =20
+        total_epoch =200
         warmup_epoch = 5
         init_lr = 1e-1
         lr_lower_limit = 0
