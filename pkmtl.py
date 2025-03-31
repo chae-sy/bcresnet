@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from model import BCResNets  # assuming this is the original BCResNet
+from model import BCResNets, ConvBNReLU  # assuming this is the original BCResNet
 from torch.nn.functional import normalize
 from torch.nn.functional import cosine_similarity
 
