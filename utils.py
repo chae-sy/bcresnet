@@ -340,7 +340,7 @@ class PKMTLDataset(Dataset):
     def __len__(self):
         return len(self.base)
 
-    def __getitem__(self, idx):
+    def __getitem__(self, idx, retry_count=0):
         
         def safe_sample(candidates, exclude_idx=None):
             if exclude_idx is not None:
@@ -353,26 +353,24 @@ class PKMTLDataset(Dataset):
                 candidates &= set(self.index_by_label[label])
             if speaker is not None:
                 candidates &= set(self.index_by_speaker[speaker])
-            return self.base[safe_sample(list(candidates), exclude_idx)] if candidates else None
+            candidates = list(candidates)
+            idx = safe_sample(candidates, exclude_idx)
+            return self.base[idx] if idx is not None else None
 
-        # Get anchor sample
         anchor_wave, anchor_label, anchor_spk, _ = self.base[idx]
 
-        # List of other labels (for negative keyword)
         other_labels = list(set(label_dict.values()) - {anchor_label})
-
-        # List of other speakers (for non-target speaker)
         other_speakers = list(set(self.index_by_speaker.keys()) - {anchor_spk})
 
-        # Get the 4 combinations
         ts_tk = sample_match(label=anchor_label, speaker=anchor_spk, exclude_idx=idx)
         ts_ntk = sample_match(label=random.choice(other_labels), speaker=anchor_spk)
         nts_tk = sample_match(label=anchor_label, speaker=random.choice(other_speakers)) if other_speakers else None
         nts_ntk = sample_match(label=random.choice(other_labels), speaker=random.choice(other_speakers)) if other_speakers else None
 
         if None in (ts_tk, ts_ntk, nts_tk, nts_ntk):
-            return self.__getitem__(random.randint(0, len(self) - 1))
-
+            if retry_count >= 10:
+                raise RuntimeError("Exceeded retry limit while sampling valid 4-tuple")
+            return self.__getitem__(random.randint(0, len(self) - 1), retry_count + 1)
 
         return {
             "anchor": anchor_wave,
