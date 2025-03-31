@@ -56,23 +56,37 @@ def ScanAudioFiles(root_dir, ver):
     return audio_paths, labels
 
 
-class SpeechCommand(Dataset):
-    """GSC"""
-
+class SpeechCommandWithSpeaker(Dataset):
     def __init__(self, root_dir, ver, transform=None):
         self.transform = transform
-        self.data_list, self.labels = ScanAudioFiles(root_dir, ver)
+        self.data = []  # [(file_path, label, speaker_id)]
+
+        for path, _, files in sorted(os.walk(root_dir, followlinks=True)):
+            for file in files:
+                if not file.endswith(".wav"):
+                    continue
+                class_name = path.split("/")[-1]
+                if class_name not in label_dict:
+                    continue
+                speaker_id = path.split("/")[-2]  # assumes structure: .../<speaker>/<keyword>/<file>
+                file_path = os.path.join(path, file)
+                label = label_dict[class_name]
+                self.data.append((file_path, label, speaker_id))
+
+        self.speaker2idx = {spk: i for i, spk in enumerate(sorted(set(d[2] for d in self.data)))}
+        print("Loaded samples:", len(self.data))
+        print("Unique speakers:", len(self.speaker2idx))
 
     def __len__(self):
-        return len(self.labels)
+        return len(self.data)
 
     def __getitem__(self, idx):
-        audio_path = self.data_list[idx]
-        sample, _ = torchaudio.load(audio_path)
+        path, label, speaker = self.data[idx]
+        waveform, _ = torchaudio.load(path)
+        speaker_id = self.speaker2idx[speaker]
         if self.transform:
-            sample = self.transform(sample)
-        label = self.labels[idx]
-        return sample, label
+            waveform = self.transform(waveform)
+        return waveform, label, speaker_id, path
 
 
 def spec_augment(
@@ -311,3 +325,52 @@ def SplitDataset(loc):
             "%s/%s" % (target_loc, split_name), "%s/%s_12class" % (loc, split_name)
         )
         make_empty_audio("%s/%s_12class/_silence_" % (loc, split_name), sample_per_cls[idx])
+        
+        
+class PKMTLDataset(Dataset):
+    def __init__(self, base_dataset: SpeechCommandWithSpeaker):
+        self.base = base_dataset
+        self.index_by_label = {}
+        self.index_by_speaker = {}
+        
+        for i, (_, label, speaker_id, _) in enumerate(self.base):
+            self.index_by_label.setdefault(label, []).append(i)
+            self.index_by_speaker.setdefault(speaker_id, []).append(i)
+
+    def __len__(self):
+        return len(self.base)
+
+    def __getitem__(self, idx):
+        anchor_wave, anchor_label, anchor_spk, _ = self.base[idx]
+
+        def sample_match(label=None, speaker=None, exclude_idx=None):
+            candidates = set(range(len(self.base)))
+            if label is not None:
+                candidates &= set(self.index_by_label[label])
+            if speaker is not None:
+                candidates &= set(self.index_by_speaker[speaker])
+            if exclude_idx is not None:
+                candidates.discard(exclude_idx)
+            return self.base[random.choice(list(candidates))]
+
+        # ts-tk: same speaker, same keyword
+        ts_tk = sample_match(label=anchor_label, speaker=anchor_spk, exclude_idx=idx)
+        # ts-ntk: same speaker, different keyword
+        other_labels = list(set(label_dict.values()) - {anchor_label})
+        ts_ntk = sample_match(label=random.choice(other_labels), speaker=anchor_spk)
+        # nts-tk: different speaker, same keyword
+        other_speakers = list(set(self.index_by_speaker.keys()) - {anchor_spk})
+        nts_tk = sample_match(label=anchor_label, speaker=random.choice(other_speakers))
+        # nts-ntk: different speaker, different keyword
+        nts_ntk = sample_match(label=random.choice(other_labels), speaker=random.choice(other_speakers))
+
+        return {
+            "anchor": anchor_wave,
+            "ts_tk": ts_tk,
+            "ts_ntk": ts_ntk,
+            "nts_tk": nts_tk,
+            "nts_ntk": nts_ntk,
+            "target_label": anchor_label,
+            "target_speaker": anchor_spk
+        }
+
