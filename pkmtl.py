@@ -123,7 +123,9 @@ def train_epoch(model, dataloader, optimizer, device):
     model.train()
     total_loss, total_kws, total_sv = 0.0, 0.0, 0.0
     for batch in dataloader:
-        x, label_kws, label_sv = batch['input'].to(device), batch['label_kws'].to(device), batch['label_sv'].to(device)
+        x = batch['anchor'].to(device)
+        label_kws = batch['target_label'].to(device)
+        label_sv = batch['target_speaker'].to(device)
         optimizer.zero_grad()
         out_kws, out_sv = model(x, task='mtl')
         loss, loss_kws, loss_sv = compute_mtl_loss(out_kws, out_sv, label_kws, label_sv)
@@ -143,7 +145,9 @@ def evaluate(model, dataloader, device):
     total = 0
     with torch.no_grad():
         for batch in dataloader:
-            x, label_kws, label_sv = batch['input'].to(device), batch['label_kws'].to(device), batch['label_sv'].to(device)
+            x = batch['anchor'].to(device)
+            label_kws = batch['target_label'].to(device)
+            label_sv = batch['target_speaker'].to(device)
             out_kws, out_sv = model(x, task='mtl')
             pred_kws = out_kws.argmax(dim=1)
             pred_sv = out_sv.argmax(dim=1)
