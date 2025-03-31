@@ -10,7 +10,7 @@ from torchvision import transforms
 from tqdm import tqdm
 
 from pkmtl import PKMTLNet, train_epoch, evaluate, evaluate_with_far_frr
-from bcresnet_model import BCResNets
+from model import BCResNets
 from utils import DownloadDataset, Padding, Preprocess, SpeechCommandWithSpeaker, PKMTLDataset, SplitDataset
 
 
