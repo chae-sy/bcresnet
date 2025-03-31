@@ -27,12 +27,18 @@ class SharedEncoder(nn.Module):
         self.cnn_head = bcresnet_tau3.cnn_head
         self.body = nn.ModuleList(bcresnet_tau3.BCBlocks[:num_shared_stages])
 
+        # Get output channels from the last block in the last kept stage
+        last_stage = bcresnet_tau3.BCBlocks[num_shared_stages - 1]
+        last_block = last_stage[-1]  # last block in that stage
+        self.out_channels = last_block.f1[0].block[0].out_channels  # get from Conv2d layer
+
     def forward(self, x):
         x = self.cnn_head(x)
         for stage in self.body:
             for block in stage:
                 x = block(x)
         return x
+
 
 
 class SubNet(nn.Module):
@@ -48,6 +54,7 @@ class SubNet(nn.Module):
 
     def forward(self, x):
         return self.blocks(x)
+
 
 
 class SCM(nn.Module):
@@ -78,9 +85,12 @@ class TRM(nn.Module):
 class PKMTLNet(nn.Module):
     def __init__(self, backbone: BCResNets, embedding_dim=128, num_keywords=12, num_speakers=1881, alpha=0.5):
         super().__init__()
-        self.shared_encoder = SharedEncoder(backbone)
-        self.kws_subnet = SubNet(in_channels=backbone.c[-3], out_dim=embedding_dim)
-        self.sv_subnet = SubNet(in_channels=backbone.c[-3], out_dim=embedding_dim)
+        self.shared_encoder = SharedEncoder(backbone, num_shared_stages=2)
+        shared_out_channels = self.shared_encoder.out_channels
+
+        self.kws_subnet = SubNet(in_channels=shared_out_channels, out_dim=embedding_dim)
+        self.sv_subnet = SubNet(in_channels=shared_out_channels, out_dim=embedding_dim)
+
         self.kws_classifier = CosineClassifier(embedding_dim, num_keywords)
         self.sv_classifier = CosineClassifier(embedding_dim, num_speakers)
         self.scm = SCM(alpha=alpha)
