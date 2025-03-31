@@ -25,6 +25,7 @@ class Trainer:
         self.__dict__.update(vars(args))
 
         self.device = torch.device(f"cuda:{self.gpu}" if torch.cuda.is_available() else "cpu")
+        print(f'The code is on cuda:{self.device}')
         self._load_data()
         self._load_model()
 
