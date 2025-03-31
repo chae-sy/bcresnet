@@ -379,15 +379,21 @@ class PKMTLDataset(Dataset):
             candidates = set(self.index_by_label[label]) & set(self.index_by_speaker[speaker])
             if exclude is not None:
                 candidates.discard(exclude)
-            return self.base[random.choice(list(candidates))] if candidates else None
+            if not candidates:
+                return None
+            wav, _, _, _ = self.base[random.choice(list(candidates))]
+            return wav
 
         other_labels = list(set(self.index_by_label.keys()) - {anchor_label})
         other_speakers = list(set(self.index_by_speaker.keys()) - {anchor_spk})
 
         ts_tk = sample(anchor_label, anchor_spk, exclude=idx)
         ts_ntk = sample(random.choice(other_labels), anchor_spk)
-        nts_tk = sample(anchor_label, random.choice(other_speakers))
-        nts_ntk = sample(random.choice(other_labels), random.choice(other_speakers))
+        nts_tk = sample(anchor_label, random.choice(other_speakers)) if other_speakers else None
+        nts_ntk = sample(random.choice(other_labels), random.choice(other_speakers)) if other_speakers else None
+
+        if None in (ts_tk, ts_ntk, nts_tk, nts_ntk):
+            return self.__getitem__(random.randint(0, len(self) - 1))
 
         return {
             "anchor": anchor_wave,
@@ -395,6 +401,7 @@ class PKMTLDataset(Dataset):
             "ts_ntk": ts_ntk,
             "nts_tk": nts_tk,
             "nts_ntk": nts_ntk,
-            "target_label": anchor_label,
-            "target_speaker": anchor_spk
+            "target_label": torch.tensor(anchor_label),
+            "target_speaker": torch.tensor(anchor_spk)
         }
+
