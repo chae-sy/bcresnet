@@ -341,7 +341,11 @@ class PKMTLDataset(Dataset):
         return len(self.base)
 
     def __getitem__(self, idx):
-        anchor_wave, anchor_label, anchor_spk, _ = self.base[idx]
+        
+        def safe_sample(candidates, exclude_idx=None):
+            if exclude_idx is not None:
+                candidates = [idx for idx in candidates if idx != exclude_idx]
+            return random.choice(candidates) if candidates else None
 
         def sample_match(label=None, speaker=None, exclude_idx=None):
             candidates = set(range(len(self.base)))
@@ -349,20 +353,26 @@ class PKMTLDataset(Dataset):
                 candidates &= set(self.index_by_label[label])
             if speaker is not None:
                 candidates &= set(self.index_by_speaker[speaker])
-            if exclude_idx is not None:
-                candidates.discard(exclude_idx)
-            return self.base[random.choice(list(candidates))]
+            return self.base[safe_sample(list(candidates), exclude_idx)] if candidates else None
 
-        # ts-tk: same speaker, same keyword
-        ts_tk = sample_match(label=anchor_label, speaker=anchor_spk, exclude_idx=idx)
-        # ts-ntk: same speaker, different keyword
+        # Get anchor sample
+        anchor_wave, anchor_label, anchor_spk, _ = self.base[idx]
+
+        # List of other labels (for negative keyword)
         other_labels = list(set(label_dict.values()) - {anchor_label})
-        ts_ntk = sample_match(label=random.choice(other_labels), speaker=anchor_spk)
-        # nts-tk: different speaker, same keyword
+
+        # List of other speakers (for non-target speaker)
         other_speakers = list(set(self.index_by_speaker.keys()) - {anchor_spk})
-        nts_tk = sample_match(label=anchor_label, speaker=random.choice(other_speakers))
-        # nts-ntk: different speaker, different keyword
-        nts_ntk = sample_match(label=random.choice(other_labels), speaker=random.choice(other_speakers))
+
+        # Get the 4 combinations
+        ts_tk = sample_match(label=anchor_label, speaker=anchor_spk, exclude_idx=idx)
+        ts_ntk = sample_match(label=random.choice(other_labels), speaker=anchor_spk)
+        nts_tk = sample_match(label=anchor_label, speaker=random.choice(other_speakers)) if other_speakers else None
+        nts_ntk = sample_match(label=random.choice(other_labels), speaker=random.choice(other_speakers)) if other_speakers else None
+
+        if None in (ts_tk, ts_ntk, nts_tk, nts_ntk):
+            return self.__getitem__(random.randint(0, len(self) - 1))
+
 
         return {
             "anchor": anchor_wave,
