@@ -106,8 +106,8 @@ class Trainer:
         transform = transforms.Compose([Padding()])
         self.train_dataset = PKMTLDataset(SpeechCommandWithSpeaker(train_dir, self.ver, transform=transform))
         self.valid_dataset = PKMTLDataset(SpeechCommandWithSpeaker(valid_dir, self.ver, transform=transform))
-        self.train_loader = DataLoader(self.train_dataset, batch_size=64, shuffle=True, num_workers=2)
-        self.valid_loader = DataLoader(self.valid_dataset, batch_size=64, shuffle=False, num_workers=2)
+        self.train_loader = DataLoader(self.train_dataset, batch_size=64, shuffle=True, num_workers=0)
+        self.valid_loader = DataLoader(self.valid_dataset, batch_size=64, shuffle=False, num_workers=0)
 
         specaugment = self.tau >= 1.5
         freq_masking = {1: 0, 1.5: 1, 2: 3, 3: 5, 6: 7, 8: 7}

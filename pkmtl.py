@@ -22,12 +22,10 @@ class CosineClassifier(nn.Module):
 
 
 class SharedEncoder(nn.Module):
-    def __init__(self, bcresnet_tau3: BCResNets):
+    def __init__(self, bcresnet_tau3: BCResNets, num_shared_stages=2):
         super().__init__()
         self.cnn_head = bcresnet_tau3.cnn_head
-        self.body = nn.ModuleList()
-        for i, block in enumerate(bcresnet_tau3.BCBlocks):
-            self.body.append(nn.Sequential(*block[:-2]))  # Remove last 2 conv stages
+        self.body = nn.ModuleList(bcresnet_tau3.BCBlocks[:num_shared_stages])
 
     def forward(self, x):
         x = self.cnn_head(x)
