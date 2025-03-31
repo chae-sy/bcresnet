@@ -33,7 +33,7 @@ class Trainer:
         learning_rate = 0.001
         embedding_dim = 128
         num_keywords = 12
-        num_speakers = len(self.train_dataset.speaker2idx)
+        num_speakers = len(self.train_dataset.base.speaker2idx)
         batch_size = 64
 
         model = PKMTLNet(self.model, embedding_dim, num_keywords, num_speakers, alpha=0.5).to(self.device)
