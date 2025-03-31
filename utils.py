@@ -68,7 +68,7 @@ class SpeechCommandWithSpeaker(Dataset):
                 class_name = path.split("/")[-1]
                 if class_name not in label_dict:
                     continue
-                speaker_id = path.split("/")[-2]  # assumes structure: .../<speaker>/<keyword>/<file>
+                speaker_id = file.split("_")[0]
                 file_path = os.path.join(path, file)
                 label = label_dict[class_name]
                 self.data.append((file_path, label, speaker_id))
