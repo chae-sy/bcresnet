@@ -327,50 +327,67 @@ def SplitDataset(loc):
         make_empty_audio("%s/%s_12class/_silence_" % (loc, split_name), sample_per_cls[idx])
         
         
+import random
+from torch.utils.data import Dataset
+
 class PKMTLDataset(Dataset):
-    def __init__(self, base_dataset: SpeechCommandWithSpeaker):
+    def __init__(self, base_dataset):
         self.base = base_dataset
         self.index_by_label = {}
         self.index_by_speaker = {}
-        
+
         for i, (_, label, speaker_id, _) in enumerate(self.base):
             self.index_by_label.setdefault(label, []).append(i)
             self.index_by_speaker.setdefault(speaker_id, []).append(i)
 
+        self.valid_indices = self._precompute_valid_indices()
+        print(f"✅ Valid anchor indices: {len(self.valid_indices)}")
+
+    def _precompute_valid_indices(self):
+        valid = []
+        for idx in range(len(self.base)):
+            _, label, speaker, _ = self.base[idx]
+            other_labels = list(set(self.index_by_label.keys()) - {label})
+            other_speakers = list(set(self.index_by_speaker.keys()) - {speaker})
+
+            def has(label, speaker, exclude=None):
+                candidates = set(self.index_by_label[label]) & set(self.index_by_speaker[speaker])
+                if exclude is not None:
+                    candidates.discard(exclude)
+                return len(candidates) > 0
+
+            if not other_labels or not other_speakers:
+                continue
+
+            if (
+                has(label, speaker, exclude=idx) and
+                any(has(lbl, speaker) for lbl in other_labels) and
+                any(has(label, spk) for spk in other_speakers) and
+                any(has(lbl, spk) for lbl in other_labels for spk in other_speakers)
+            ):
+                valid.append(idx)
+        return valid
+
     def __len__(self):
-        return len(self.base)
+        return len(self.valid_indices)
 
-    def __getitem__(self, idx, retry_count=0):
-        
-        def safe_sample(candidates, exclude_idx=None):
-            if exclude_idx is not None:
-                candidates = [idx for idx in candidates if idx != exclude_idx]
-            return random.choice(candidates) if candidates else None
-
-        def sample_match(label=None, speaker=None, exclude_idx=None):
-            candidates = set(range(len(self.base)))
-            if label is not None:
-                candidates &= set(self.index_by_label[label])
-            if speaker is not None:
-                candidates &= set(self.index_by_speaker[speaker])
-            candidates = list(candidates)
-            idx = safe_sample(candidates, exclude_idx)
-            return self.base[idx] if idx is not None else None
-
+    def __getitem__(self, valid_idx):
+        idx = self.valid_indices[valid_idx]
         anchor_wave, anchor_label, anchor_spk, _ = self.base[idx]
 
-        other_labels = list(set(label_dict.values()) - {anchor_label})
+        def sample(label=None, speaker=None, exclude=None):
+            candidates = set(self.index_by_label[label]) & set(self.index_by_speaker[speaker])
+            if exclude is not None:
+                candidates.discard(exclude)
+            return self.base[random.choice(list(candidates))] if candidates else None
+
+        other_labels = list(set(self.index_by_label.keys()) - {anchor_label})
         other_speakers = list(set(self.index_by_speaker.keys()) - {anchor_spk})
 
-        ts_tk = sample_match(label=anchor_label, speaker=anchor_spk, exclude_idx=idx)
-        ts_ntk = sample_match(label=random.choice(other_labels), speaker=anchor_spk)
-        nts_tk = sample_match(label=anchor_label, speaker=random.choice(other_speakers)) if other_speakers else None
-        nts_ntk = sample_match(label=random.choice(other_labels), speaker=random.choice(other_speakers)) if other_speakers else None
-
-        if None in (ts_tk, ts_ntk, nts_tk, nts_ntk):
-            if retry_count >= 10:
-                raise RuntimeError("Exceeded retry limit while sampling valid 4-tuple")
-            return self.__getitem__(random.randint(0, len(self) - 1), retry_count + 1)
+        ts_tk = sample(anchor_label, anchor_spk, exclude=idx)
+        ts_ntk = sample(random.choice(other_labels), anchor_spk)
+        nts_tk = sample(anchor_label, random.choice(other_speakers))
+        nts_ntk = sample(random.choice(other_labels), random.choice(other_speakers))
 
         return {
             "anchor": anchor_wave,
@@ -381,4 +398,3 @@ class PKMTLDataset(Dataset):
             "target_label": anchor_label,
             "target_speaker": anchor_spk
         }
-
