@@ -46,14 +46,14 @@ class Trainer:
         for split in range(10):
             print(f"\n🔁 Evaluating Split {split + 1}/10")
             for epoch in range(total_epoch):
-                train_loss, loss_kws, loss_sv = train_epoch(model, self.train_loader, optimizer, self.device)
+                train_loss, loss_kws, loss_sv = train_epoch(model, self.train_loader, optimizer, self.device, self.preprocess_train)
 
             best_alpha, best_thresh, best_frr = self.grid_search_threshold_alpha(model, self.valid_loader, alpha_grid, threshold_grid)
             print(f"Best Alpha: {best_alpha:.2f}, Best Threshold: {best_thresh:.2f}, FRR: {best_frr:.4f}")
 
             model.scm.alpha = best_alpha
-            frr, far = evaluate_with_far_frr(model, self.valid_loader, self.device, threshold=best_thresh, task='scm')
-            acc_kws, _ = evaluate(model, self.valid_loader, self.device)
+            frr, far = evaluate_with_far_frr(model, self.valid_loader, self.device, threshold=best_thresh, task='scm', preprocess_fn=self.preprocess_test)
+            acc_kws, _ = evaluate(model, self.valid_loader, self.device, self.preprocess_test)
 
             frr_list.append(frr)
             far_list.append(far)
@@ -73,7 +73,7 @@ class Trainer:
         for alpha in alpha_grid:
             model.scm.alpha = alpha
             for thresh in threshold_grid:
-                frr, far = evaluate_with_far_frr(model, val_loader, self.device, threshold=thresh, task='scm')
+                frr, far = evaluate_with_far_frr(model, val_loader, self.device, threshold=thresh, task='scm', preprocess_fn=self.preprocess_test)
                 if far <= 0.01 and frr < best_frr:
                     best_frr = frr
                     best_thresh = thresh

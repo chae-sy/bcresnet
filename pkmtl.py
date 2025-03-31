@@ -119,11 +119,11 @@ def compute_mtl_loss(out_kws, out_sv, label_kws, label_sv, lambda_speaker=0.1):
     return loss, loss_kws.item(), loss_sv.item()
 
 
-def train_epoch(model, dataloader, optimizer, device):
+def train_epoch(model, dataloader, optimizer, device, preprocess_fn):
     model.train()
     total_loss, total_kws, total_sv = 0.0, 0.0, 0.0
     for batch in dataloader:
-        x = batch['anchor'].to(device)
+        x = preprocess_fn(batch['anchor'].to(device), batch['target_label'].to(device))
         label_kws = batch['target_label'].to(device)
         label_sv = batch['target_speaker'].to(device)
         optimizer.zero_grad()
@@ -139,13 +139,13 @@ def train_epoch(model, dataloader, optimizer, device):
     return total_loss / len(dataloader), total_kws / len(dataloader), total_sv / len(dataloader)
 
 
-def evaluate(model, dataloader, device):
+def evaluate(model, dataloader, device, preprocess_fn):
     model.eval()
     correct_kws, correct_sv = 0, 0
     total = 0
     with torch.no_grad():
         for batch in dataloader:
-            x = batch['anchor'].to(device)
+            x = preprocess_fn(batch['anchor'].to(device), batch['target_label'].to(device))
             label_kws = batch['target_label'].to(device)
             label_sv = batch['target_speaker'].to(device)
             out_kws, out_sv = model(x, task='mtl')
@@ -162,7 +162,7 @@ def evaluate(model, dataloader, device):
 
 
 
-def evaluate_with_far_frr(model, dataloader, device, threshold=0.0, task='scm'):
+def evaluate_with_far_frr(model, dataloader, device, threshold=0.0, task='scm', preprocess_fn=None):
     """
     Evaluate FAR and FRR based on task-specific similarity scores (SCM or TRM)
     """
@@ -174,10 +174,10 @@ def evaluate_with_far_frr(model, dataloader, device, threshold=0.0, task='scm'):
 
     with torch.no_grad():
         for batch in dataloader:
-            ts_tk = batch['ts_tk'][0].to(device)  # positive pair
-            ts_ntk = batch['ts_ntk'][0].to(device)
-            nts_tk = batch['nts_tk'][0].to(device)
-            nts_ntk = batch['nts_ntk'][0].to(device)
+            ts_tk = preprocess_fn(batch['ts_tk'][0].unsqueeze(0).to(device), [batch['target_label']]).to(device)
+            ts_ntk = preprocess_fn(batch['ts_ntk'][0].unsqueeze(0).to(device), [batch['target_label']]).to(device)
+            nts_tk = preprocess_fn(batch['nts_tk'][0].unsqueeze(0).to(device), [batch['target_label']]).to(device)
+            nts_ntk = preprocess_fn(batch['nts_ntk'][0].unsqueeze(0).to(device), [batch['target_label']]).to(device)
 
             if task == 'scm':
                 z_k_pos, z_s_pos = model(ts_tk, task='scm')
