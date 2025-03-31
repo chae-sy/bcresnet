@@ -131,9 +131,13 @@ def train_epoch(model, dataloader, optimizer, device, preprocess_fn):
     model.train()
     total_loss, total_kws, total_sv = 0.0, 0.0, 0.0
     for batch in dataloader:
-        x = preprocess_fn(batch['anchor'].to(device), batch['target_label'].to(device))
-        label_kws = batch['target_label'].to(device)
-        label_sv = batch['target_speaker'].to(device)
+        anchor, target_label, target_speaker = map(lambda t: t.to(device, non_blocking=True), 
+                                           (batch['anchor'], batch['target_label'], batch['target_speaker']))
+
+        x = preprocess_fn(anchor, target_label)
+        label_kws = target_label
+        label_sv = target_speaker
+
         optimizer.zero_grad()
         out_kws, out_sv = model(x, task='mtl')
         loss, loss_kws, loss_sv = compute_mtl_loss(out_kws, out_sv, label_kws, label_sv)
@@ -153,9 +157,12 @@ def evaluate(model, dataloader, device, preprocess_fn):
     total = 0
     with torch.no_grad():
         for batch in dataloader:
-            x = preprocess_fn(batch['anchor'].to(device), batch['target_label'].to(device))
-            label_kws = batch['target_label'].to(device)
-            label_sv = batch['target_speaker'].to(device)
+            anchor, target_label, target_speaker = map(lambda t: t.to(device, non_blocking=True), 
+                                           (batch['anchor'], batch['target_label'], batch['target_speaker']))
+
+            x = preprocess_fn(anchor, target_label)
+            label_kws = target_label
+            label_sv = target_speaker
             out_kws, out_sv = model(x, task='mtl')
             pred_kws = out_kws.argmax(dim=1)
             pred_sv = out_sv.argmax(dim=1)
