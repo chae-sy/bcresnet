@@ -1,230 +1,124 @@
-# Copyright (c) 2023 Qualcomm Technologies, Inc.
-# All Rights Reserved.
-
-
-# this line added inside container!
-# another test line added
 import os
-from argparse import ArgumentParser
-import shutil
-from glob import glob
-
-import numpy as np
+import time
 import torch
-import torch.nn.functional as F
+import shutil
+import numpy as np
+from glob import glob
+from argparse import ArgumentParser
 from torch.utils.data import DataLoader
 from torchvision import transforms
 from tqdm import tqdm
 
+from pkmtl import PKMTLNet, train_epoch, evaluate, evaluate_with_far_frr
 from bcresnet_model import BCResNets
-from utils import DownloadDataset, Padding, Preprocess, SpeechCommand, SplitDataset
+from utils import DownloadDataset, Padding, Preprocess, SpeechCommandWithSpeaker, PKMTLDataset, SplitDataset
 
 
 class Trainer:
     def __init__(self):
-        """
-        Constructor for the Trainer class.
-
-        Initializes the trainer object with default values for the hyperparameters and data loaders.
-        """
         parser = ArgumentParser()
-        parser.add_argument(
-            "--ver", default=1, help="google speech command set version 1 or 2", type=int
-        )
-        parser.add_argument(
-            "--tau", default=1, help="model size", type=float, choices=[1, 1.5, 2, 3, 6, 8]
-        )
-        parser.add_argument("--gpu", default=0, help="gpu device id", type=int)
-        parser.add_argument("--download", help="download data", action="store_true")
+        parser.add_argument("--ver", default=1, type=int, help="GSC version")
+        parser.add_argument("--tau", default=3, type=float, choices=[1, 1.5, 2, 3, 6, 8])
+        parser.add_argument("--gpu", default=0, type=int)
+        parser.add_argument("--download", action="store_true")
         args = parser.parse_args()
         self.__dict__.update(vars(args))
-        self.device = torch.device("cuda:%d" % self.gpu if torch.cuda.is_available() else "cpu")
-        
-        # set bitwdith = 8
-        K = 8
-        
+
+        self.device = torch.device(f"cuda:{self.gpu}" if torch.cuda.is_available() else "cpu")
         self._load_data()
-        self._load_model(K)
+        self._load_model()
 
     def __call__(self):
-        """
-        Method that allows the object to be called like a function.
+        total_epoch = 50
+        learning_rate = 0.001
+        embedding_dim = 128
+        num_keywords = 12
+        num_speakers = len(self.train_dataset.speaker2idx)
+        batch_size = 64
 
-        Trains the model and presents the train/test progress.
-        """
-        # train hyperparameters
-        total_epoch =20
-        warmup_epoch = 5
-        init_lr = 1e-1
-        lr_lower_limit = 0
+        model = PKMTLNet(self.model, embedding_dim, num_keywords, num_speakers, alpha=0.5).to(self.device)
+        optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 
-        # optimizer
-        optimizer = torch.optim.SGD(self.model.parameters(), lr=0, weight_decay=1e-3, momentum=0.9)
-        n_step_warmup = len(self.train_loader) * warmup_epoch
-        total_iter = len(self.train_loader) * total_epoch
-        iterations = 0
+        frr_list, far_list, acc_list = [], [], []
+        alpha_grid = np.linspace(0.0, 1.0, 11)
+        threshold_grid = np.linspace(-1.0, 1.0, 101)
 
-        # train
-        for epoch in range(total_epoch):
-            self.model.train()
-            lambda_alpha=0.0002
-            for sample in tqdm(self.train_loader, desc="epoch %d, iters" % (epoch + 1)):
-                # lr cos schedule
-                iterations += 1
-                if iterations < n_step_warmup:
-                    lr = init_lr * iterations / n_step_warmup
-                else:
-                    lr = lr_lower_limit + 0.5 * (init_lr - lr_lower_limit) * (
-                        1
-                        + np.cos(
-                            np.pi * (iterations - n_step_warmup) / (total_iter - n_step_warmup)
-                        )
-                    )
-                for param_group in optimizer.param_groups:
-                    param_group["lr"] = lr
+        for split in range(10):
+            print(f"\n🔁 Evaluating Split {split + 1}/10")
+            for epoch in range(total_epoch):
+                train_loss, loss_kws, loss_sv = train_epoch(model, self.train_loader, optimizer, self.device)
 
-                inputs, labels = sample
-                inputs = inputs.to(self.device)
-                labels = labels.to(self.device)
-                inputs = self.preprocess_train(inputs, labels, augment=True)
-                outputs = self.model(inputs)
-                loss = F.cross_entropy(outputs, labels)
-                # L2 regularization
-                l2_alpha = 0.0
-                for name, param in self.model.named_parameters():
-                    if "alpha" in name:
-                        l2_alpha += torch.pow(param, 2)
-                loss += lambda_alpha * l2_alpha
-                
-                loss.backward()
-                optimizer.step()
-                self.model.zero_grad()
+            best_alpha, best_thresh, best_frr = self.grid_search_threshold_alpha(model, self.valid_loader, alpha_grid, threshold_grid)
+            print(f"Best Alpha: {best_alpha:.2f}, Best Threshold: {best_thresh:.2f}, FRR: {best_frr:.4f}")
 
-            # valid
-            print("cur lr check ... %.4f" % lr)
-            with torch.no_grad():
-                self.model.eval()
-                valid_acc = self.Test(self.valid_dataset, self.valid_loader, augment=True)
-                print("valid acc: %.3f" % (valid_acc))
-            for name, param in self.model.named_parameters():
-                if "alpha" in name:
-                    print(name, param.item())
+            model.scm.alpha = best_alpha
+            frr, far = evaluate_with_far_frr(model, self.valid_loader, self.device, threshold=best_thresh, task='scm')
+            acc_kws, _ = evaluate(model, self.valid_loader, self.device)
 
-        test_acc = self.Test(self.test_dataset, self.test_loader, augment=True)  # official testset
-        print("test acc: %.3f" % (test_acc))
-        print("End.")
-        self.save_model(self.model) 
+            frr_list.append(frr)
+            far_list.append(far)
+            acc_list.append(acc_kws)
 
-    def Test(self, dataset, loader, augment):
-        """
-        Tests the model on a given dataset.
+            print(f"Split {split+1} — FAR: {far:.4f}, FRR: {frr:.4f}, Top-1 Acc: {acc_kws:.4f}, ERR: {1 - acc_kws:.4f}")
 
-        Parameters:
-            dataset (Dataset): The dataset to test the model on.
-            loader (DataLoader): The data loader to use for batching the data.
-            augment (bool): Flag indicating whether to use data augmentation during testing.
+        avg_frr = np.mean(frr_list)
+        avg_far = np.mean(far_list)
+        avg_acc = np.mean(acc_list)
+        print(f"\n📊 Final Avg over 10 splits → FAR: {avg_far:.4f}, FRR: {avg_frr:.4f}, Top-1 Acc: {avg_acc:.4f}, ERR: {1 - avg_acc:.4f}")
 
-        Returns:
-            float: The accuracy of the model on the given dataset.
-        """
-        true_count = 0.0
-        num_testdata = float(len(dataset))
-        for inputs, labels in loader:
-            inputs = inputs.to(self.device)
-            labels = labels.to(self.device)
-            inputs = self.preprocess_test(inputs, labels=labels, is_train=False, augment=augment)
-            outputs = self.model(inputs)
-            prediction = torch.argmax(outputs, dim=-1)
-            true_count += torch.sum(prediction == labels).detach().cpu().numpy()
-        acc = true_count / num_testdata * 100.0  # percentage
-        return acc
+        self.save_model(model)
+
+    def grid_search_threshold_alpha(self, model, val_loader, alpha_grid, threshold_grid):
+        best_alpha, best_thresh, best_frr = None, None, float('inf')
+        for alpha in alpha_grid:
+            model.scm.alpha = alpha
+            for thresh in threshold_grid:
+                frr, far = evaluate_with_far_frr(model, val_loader, self.device, threshold=thresh, task='scm')
+                if far <= 0.01 and frr < best_frr:
+                    best_frr = frr
+                    best_thresh = thresh
+                    best_alpha = alpha
+        return best_alpha, best_thresh, best_frr
 
     def save_model(self, model):
-        import torch
-        import time
-        month=['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][time.localtime().tm_mon-1]
-        date=time.localtime().tm_mday
-        today=f'{month}{date}'
-        time=f'{time.localtime().tm_hour}{time.localtime().tm_min}'
-        file_name=f'model_{today}_{time}.pt'
-        torch.save(model, file_name)
-        print('model saved : ', file_name)
+        month = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][time.localtime().tm_mon - 1]
+        date = time.localtime().tm_mday
+        today = f'{month}{date}'
+        now_time = f'{time.localtime().tm_hour}{time.localtime().tm_min}'
+        file_name = f'model_{today}_{now_time}.pt'
+        torch.save(model.state_dict(), file_name)
+        print('✅ Model saved:', file_name)
 
     def _load_data(self):
-        """
-        Private method that loads data into the object.
-
-        Downloads and splits the data if necessary.
-        """
-        print("Check google speech commands dataset v1 or v2 ...")
+        print("Checking dataset...")
         if not os.path.isdir("./data"):
             os.mkdir("./data")
         base_dir = "./data/speech_commands_v0.01"
         url = "https://storage.googleapis.com/download.tensorflow.org/data/speech_commands_v0.01.tar.gz"
-        url_test = "https://storage.googleapis.com/download.tensorflow.org/data/speech_commands_test_set_v0.01.tar.gz"
-        if self.ver == 2:
-            base_dir = base_dir.replace("v0.01", "v0.02")
-            url = url.replace("v0.01", "v0.02")
-            url_test = url_test.replace("v0.01", "v0.02")
-        test_dir = base_dir.replace("commands", "commands_test_set")
         if self.download:
-            old_dirs = glob(base_dir.replace("commands_", "commands_*"))
-            for old_dir in old_dirs:
-                shutil.rmtree(old_dir)
-            os.mkdir(test_dir)
-            DownloadDataset(test_dir, url_test)
-            os.mkdir(base_dir)
             DownloadDataset(base_dir, url)
             SplitDataset(base_dir)
-            print("Done...")
 
-        # Define data loaders
-        train_dir = "%s/train_12class" % base_dir
-        valid_dir = "%s/valid_12class" % base_dir
-        noise_dir = "%s/_background_noise_" % base_dir
-        batch_size=250
+        train_dir = f"{base_dir}/train_12class"
+        valid_dir = f"{base_dir}/valid_12class"
+        noise_dir = f"{base_dir}/_background_noise_"
 
         transform = transforms.Compose([Padding()])
-        self.train_dataset = SpeechCommand(train_dir, self.ver, transform=transform)
-        self.train_loader = DataLoader(
-            self.train_dataset, batch_size=batch_size, shuffle=True, num_workers=0, drop_last=False
-        )
-        self.valid_dataset = SpeechCommand(valid_dir, self.ver, transform=transform)
-        self.valid_loader = DataLoader(self.valid_dataset, batch_size=batch_size, num_workers=0)
-        self.test_dataset = SpeechCommand(test_dir, self.ver, transform=transform)
-        self.test_loader = DataLoader(self.test_dataset, batch_size=batch_size, num_workers=0)
-
-        print(
-            "check num of data train/valid/test %d/%d/%d"
-            % (len(self.train_dataset), len(self.valid_dataset), len(self.test_dataset))
-        )
+        self.train_dataset = PKMTLDataset(SpeechCommandWithSpeaker(train_dir, self.ver, transform=transform))
+        self.valid_dataset = PKMTLDataset(SpeechCommandWithSpeaker(valid_dir, self.ver, transform=transform))
+        self.train_loader = DataLoader(self.train_dataset, batch_size=64, shuffle=True, num_workers=2)
+        self.valid_loader = DataLoader(self.valid_dataset, batch_size=64, shuffle=False, num_workers=2)
 
         specaugment = self.tau >= 1.5
-        frequency_masking_para = {1: 0, 1.5: 1, 2: 3, 3: 5, 6: 7, 8: 7}
+        freq_masking = {1: 0, 1.5: 1, 2: 3, 3: 5, 6: 7, 8: 7}
 
-        # Define preprocessors
-        self.preprocess_train = Preprocess(
-            noise_dir,
-            self.device,
-            specaug=specaugment,
-            frequency_masking_para=frequency_masking_para[self.tau],
-        )
+        self.preprocess_train = Preprocess(noise_dir, self.device, specaug=specaugment, frequency_masking_para=freq_masking[self.tau])
         self.preprocess_test = Preprocess(noise_dir, self.device)
 
-    def _load_model(self, K):
-        """
-        Private method that loads the model into the object.
-        """
-        print("Bit :", K)
-        print("model: BC-ResNet-%.1f on data v0.0%d" % (self.tau, self.ver))
-        self.model = BCResNets(int(self.tau * 8), bitwidth=K).to(self.device)
-
+    def _load_model(self):
+        self.model = BCResNets(int(self.tau * 8)).to(self.device)
 
 
 if __name__ == "__main__":
-    _trainer = Trainer()
-    _trainer()
-    # torch.save(_trainer.model.state_dict(),"model_params.pth")
-    # print("params saved")
-    # torch.save(_trainer.model, "model.pth")
-    # print("model saved")
+    trainer = Trainer()
+    trainer()
