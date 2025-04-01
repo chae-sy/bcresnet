@@ -156,10 +156,10 @@ class Preprocess:
         assert len(x.shape) == 3
         if augment:
             for idx in range(x.shape[0]):
-                if labels[idx] != 0 and (not is_train or random.random() > noise_prob):
+                if labels[idx].item() != 0 and (not is_train or random.random() > noise_prob):
                     continue
                 noise_amp = (
-                    np.random.uniform(0, 0.1) if labels[idx] != 0 else np.random.uniform(0, 1)
+                    np.random.uniform(0, 0.1) if labels[idx].item() != 0 else np.random.uniform(0, 1)
                 )
                 noise = random.choice(self.background_noise).to(self.device)
                 sample_loc = random.randint(0, noise.shape[-1] - self.sample_len)
