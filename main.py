@@ -25,7 +25,7 @@ class Trainer:
         self.__dict__.update(vars(args))
 
         self.device = torch.device(f"cuda:{self.gpu}" if torch.cuda.is_available() else "cpu")
-        print(f'The code is on cuda:{self.device}')
+        print(f'The code is on {self.device}')
         self._load_data()
         self._load_model()
 
@@ -107,8 +107,8 @@ class Trainer:
         transform = transforms.Compose([Padding()])
         self.train_dataset = PKMTLDataset(SpeechCommandWithSpeaker(train_dir, self.ver, transform=transform))
         self.valid_dataset = PKMTLDataset(SpeechCommandWithSpeaker(valid_dir, self.ver, transform=transform))
-        self.train_loader = DataLoader(self.train_dataset, batch_size=1024, shuffle=True, num_workers=4, pin_memory=True)
-        self.valid_loader = DataLoader(self.valid_dataset, batch_size=1024, shuffle=False, num_workers=4, pin_memory=True)
+        self.train_loader = DataLoader(self.train_dataset, batch_size=1024, shuffle=True, num_workers=0)#4, pin_memory=True)
+        self.valid_loader = DataLoader(self.valid_dataset, batch_size=1024, shuffle=False, num_workers=0)#4, pin_memory=True)
 
         specaugment = self.tau >= 1.5
         freq_masking = {1: 0, 1.5: 1, 2: 3, 3: 5, 6: 7, 8: 7}
