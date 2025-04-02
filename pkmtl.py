@@ -126,11 +126,17 @@ def compute_mtl_loss(out_kws, out_sv, label_kws, label_sv, lambda_speaker=0.1):
     loss = loss_kws + lambda_speaker * loss_sv
     return loss, loss_kws.item(), loss_sv.item()
 
+from tqdm import tqdm
 
-def train_epoch(model, dataloader, optimizer, device, preprocess_fn):
+def train_epoch(model, dataloader, optimizer, device, preprocess_fn, epoch_idx=None):
     model.train()
     total_loss, total_kws, total_sv = 0.0, 0.0, 0.0
-    for batch in dataloader:
+
+    # Show progress bar for each epoch on a separate line
+    desc = f"📦 Epoch {epoch_idx+1}" if epoch_idx is not None else "📦 Training"
+    progress_bar = tqdm(dataloader, desc=desc, leave=True)
+
+    for batch in progress_bar:
         anchor, target_label, target_speaker = map(lambda t: t.to(device, non_blocking=True), 
                                            (batch['anchor'], batch['target_label'], batch['target_speaker']))
 
@@ -148,8 +154,13 @@ def train_epoch(model, dataloader, optimizer, device, preprocess_fn):
         total_kws += loss_kws
         total_sv += loss_sv
 
-    return total_loss / len(dataloader), total_kws / len(dataloader), total_sv / len(dataloader)
+        progress_bar.set_postfix({
+            "Loss": f"{loss.item():.4f}",
+            "KWS": f"{loss_kws:.4f}",
+            "SV": f"{loss_sv:.4f}"
+        })
 
+    return total_loss / len(dataloader), total_kws / len(dataloader), total_sv / len(dataloader)
 
 def evaluate(model, dataloader, device, preprocess_fn):
     model.eval()
