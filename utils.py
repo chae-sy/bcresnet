@@ -494,7 +494,7 @@ def preprocess_and_save(dataset, preprocess_fn, device, save_dir, batch_size=256
     print(f"✅ Saved: {x_tensor.shape[0]} samples to {save_dir}")
 
     if hasattr(dataset.base, 'speaker2idx'):
-        torch.save(dataset.speaker2idx, f"{save_dir}/speaker2idx.pt")
+        torch.save(dataset.base.speaker2idx, f"{save_dir}/speaker2idx.pt")
         print(f"✅ Saved: {save_dir}/speaker2idx.pt")
 
 def show_label_distribution(label_path, label_name="Label"):

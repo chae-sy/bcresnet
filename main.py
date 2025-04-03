@@ -101,12 +101,15 @@ class Trainer:
         best_alpha, best_thresh, best_frr = None, None, float('inf')
         for alpha in alpha_grid:
             model.scm.alpha = alpha
+            print("alpha update")
             for thresh in threshold_grid:
                 frr, far = evaluate_with_far_frr(model, val_loader, self.device, threshold=thresh, task='scm', preprocess_fn=self.preprocess_test)
                 if far <= 0.01 and frr < best_frr:
                     best_frr = frr
                     best_thresh = thresh
                     best_alpha = alpha
+                    print("best_alpha, best_thresh, best_frr until now {:}, {:}, {:}", best_alpha, best_thresh, best_frr)
+                print("threshold update")
         return best_alpha, best_thresh, best_frr
 
     def save_model(self, model):
