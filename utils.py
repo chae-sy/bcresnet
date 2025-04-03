@@ -471,3 +471,25 @@ class PKMTLDataset(Dataset):
             "target_speaker": torch.tensor(anchor_spk)
         }
 
+import os
+import torch
+from torch.utils.data import DataLoader
+from tqdm import tqdm
+
+def preprocess_and_save(dataset, preprocess_fn, device, save_dir, batch_size=256):
+    os.makedirs(save_dir, exist_ok=True)
+    loader = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=0)
+
+    all_data, all_labels = [], []
+    for x, labels in tqdm(loader, desc=f"Preprocessing -> {save_dir}"):
+        x, labels = x.to(device), labels.to(device)
+        x = preprocess_fn(x, labels, augment=False, is_train=False)
+        all_data.append(x.cpu())
+        all_labels.append(labels.cpu())
+
+    x_tensor = torch.cat(all_data)
+    y_tensor = torch.cat(all_labels)
+
+    torch.save(x_tensor, os.path.join(save_dir, "data.pt"))
+    torch.save(y_tensor, os.path.join(save_dir, "labels.pt"))
+    print(f"✅ Saved: {x_tensor.shape[0]} samples to {save_dir}")
