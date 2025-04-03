@@ -481,8 +481,9 @@ def preprocess_and_save(dataset, preprocess_fn, device, save_dir, batch_size=256
     loader = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=0)
 
     all_data, all_labels = [], []
-    for x, labels in tqdm(loader, desc=f"Preprocessing -> {save_dir}"):
-        x, labels = x.to(device), labels.to(device)
+    for batch in tqdm(loader, desc=f"Preprocessing -> {save_dir}"):
+        x = batch['anchor'].to(device)
+        labels = batch['target_label'].to(device)
         x = preprocess_fn(x, labels, augment=False, is_train=False)
         all_data.append(x.cpu())
         all_labels.append(labels.cpu())
