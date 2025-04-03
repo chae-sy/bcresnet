@@ -200,6 +200,7 @@ def evaluate_with_far_frr(model, dataloader, device, threshold=0.0, task='scm', 
 
     with torch.no_grad():
         for batch in dataloader:
+            print(batch['target_label'], batch['target_label'].shape,  batch['ts_tk'], batch['ts_tk'].shape)
             ts_tk = preprocess_fn(batch['ts_tk'][0].unsqueeze(0).to(device), [batch['target_label']]).to(device)
             ts_ntk = preprocess_fn(batch['ts_ntk'][0].unsqueeze(0).to(device), [batch['target_label']]).to(device)
             nts_tk = preprocess_fn(batch['nts_tk'][0].unsqueeze(0).to(device), [batch['target_label']]).to(device)

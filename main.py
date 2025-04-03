@@ -17,10 +17,12 @@ from utils import DownloadDataset, Padding, Preprocess, SpeechCommandWithSpeaker
 class Trainer:
     def __init__(self):
         parser = ArgumentParser()
-        parser.add_argument("--ver", default=1, type=int, help="GSC version")
+        parser.add_argument("--ver", default=2, type=int, help="GSC version")
         parser.add_argument("--tau", default=3, type=float, choices=[1, 1.5, 2, 3, 6, 8])
         parser.add_argument("--gpu", default=0, type=int)
         parser.add_argument("--download", action="store_true")
+        parser.add_argument("--epoch", default=50, type=int)
+        parser.add_argument("--batch_size", default=4096, type=int)
         args = parser.parse_args()
         self.__dict__.update(vars(args))
 
@@ -30,12 +32,12 @@ class Trainer:
         self._load_model()
 
     def __call__(self):
-        total_epoch = 50
+        total_epoch =self.epoch
         learning_rate = 0.001
         embedding_dim = 128
         num_keywords = 12
         num_speakers = len(self.train_dataset.base.speaker2idx)
-        batch_size = 1024
+        batch_size = self.batch_size
 
         model = PKMTLNet(self.model, embedding_dim, num_keywords, num_speakers, alpha=0.5).to(self.device)
         optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
@@ -105,10 +107,12 @@ class Trainer:
         noise_dir = f"{base_dir}/_background_noise_"
 
         transform = transforms.Compose([Padding()])
+        print("load train dataset..")
         self.train_dataset = PKMTLDataset(SpeechCommandWithSpeaker(train_dir, self.ver, transform=transform))
+        print("load valid dataset..")
         self.valid_dataset = PKMTLDataset(SpeechCommandWithSpeaker(valid_dir, self.ver, transform=transform))
-        self.train_loader = DataLoader(self.train_dataset, batch_size=1024, shuffle=True, num_workers=4, pin_memory=True)
-        self.valid_loader = DataLoader(self.valid_dataset, batch_size=1024, shuffle=False, num_workers=4, pin_memory=True)
+        self.train_loader = DataLoader(self.train_dataset, batch_size=self.batch_size, shuffle=True, num_workers=4, pin_memory=True)
+        self.valid_loader = DataLoader(self.valid_dataset, batch_size=self.batch_size, shuffle=False, num_workers=4, pin_memory=True)
 
         specaugment = self.tau >= 1.5
         freq_masking = {1: 0, 1.5: 1, 2: 3, 3: 5, 6: 7, 8: 7}
