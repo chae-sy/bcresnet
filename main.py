@@ -11,7 +11,7 @@ from tqdm import tqdm
 
 from pkmtl import PKMTLNet, train_epoch, evaluate, evaluate_with_far_frr
 from model import BCResNets
-from utils import DownloadDataset, Padding, Preprocess, SpeechCommandWithSpeaker, PKMTLDataset, SplitDataset, preprocess_and_save
+from utils import show_label_distribution, DownloadDataset, Padding, Preprocess, SpeechCommandWithSpeaker, PKMTLDataset, SplitDataset, preprocess_and_save
 
 
 class Trainer:
@@ -29,29 +29,40 @@ class Trainer:
 
         self.device = torch.device(f"cuda:{self.gpu}" if torch.cuda.is_available() else "cpu")
         print(f'The code is on {self.device}')
-        for case in ['train', 'valid']:
-            save_dir = f"cached/{case}"
-            data_path = os.path.join(save_dir, "data.pt")
-            label_path = os.path.join(save_dir, "labels.pt")
-            if os.path.exists(data_path) and os.path.exists(label_path):
-                print(f"✅ Cache found in {save_dir}, skipping preprocessing.")
-                x = torch.load(data_path)
-                y = torch.load(label_path)
-                shuffle = True if case == 'train' else False
-                dataset = TensorDataset(x, y)
-                loader = DataLoader(dataset, batch_size=self.batch_size, shuffle=shuffle, num_workers=self.num_workers)
 
-                print(f"📦 Loaded {len(dataset)} samples from cache ({save_dir})")
-            else:
-                self._load_data(case)
+        #load the data & show the label distribution
+        for case in ['train', 'valid']:
+            self._load_data_and_label(case)
+        
         self._load_model()
+
+    def _load_data_and_label(self, case):
+        save_dir = f"cached/{case}"
+        data_path = os.path.join(save_dir, "data.pt")
+        label_path = os.path.join(save_dir, "labels.pt")
+        if os.path.exists(data_path) and os.path.exists(label_path):
+            print(f"✅ Cache found in {save_dir}, skipping preprocessing.")
+            x = torch.load(data_path)
+            y = torch.load(label_path)
+            shuffle = True if case == 'train' else False
+            dataset = TensorDataset(x, y)
+            if case=='train':
+                self.train_loader = DataLoader(dataset, batch_size=self.batch_size, shuffle=True, num_workers=self.num_workers)
+                self.speaker2idx = torch.load("cached/train/speaker2idx.pt")
+
+            elif case == 'valid':
+                self.valid_loader = DataLoader(dataset, batch_size=self.batch_size, shuffle=False, num_workers=self.num_workers)
+            print(f"📦 Loaded {len(dataset)} samples from cache ({save_dir})")
+        else:
+            self._load_data(case)
+        show_label_distribution(f"cached/{case}/labels.pt", label_name=f"{case} Set")
 
     def __call__(self):
         total_epoch =self.epoch
         learning_rate = 0.001
         embedding_dim = 128
         num_keywords = 12
-        num_speakers = len(self.train_dataset.base.speaker2idx)
+        num_speakers = len(self.speaker2idx)
         batch_size = self.batch_size
 
         model = PKMTLNet(self.model, embedding_dim, num_keywords, num_speakers, alpha=0.5).to(self.device)
@@ -129,19 +140,15 @@ class Trainer:
         if case == 'train':
             self.train_loader=DataLoader(self.data_dataset, batch_size=self.batch_size, shuffle=True, num_workers=self.num_workers, pin_memory=True)
             self.preprocess_train = Preprocess(noise_dir, self.device, specaug=specaugment, frequency_masking_para=freq_masking[self.tau])
-            preprocess_and_save(self.train_dataset, self.preprocess_train, self.device, f"cached/{case}")
+            preprocess_and_save(self.data_dataset, self.preprocess_train, self.device, f"cached/{case}")
         else: 
             self.valid_loader = DataLoader(self.data_dataset, batch_size=self.batch_size, shuffle=False, num_workers=self.num_workers, pin_memory=True)
             self.preprocess_valid = Preprocess(noise_dir, self.device)
-            preprocess_and_save(self.valid_dataset, self.preprocess_valid, self.device, f"cached/{case}")
-
-
-
+            preprocess_and_save(self.data_dataset, self.preprocess_valid, self.device, f"cached/{case}")
 
     def _load_model(self):
         self.model = BCResNets(int(self.tau * 8)).to(self.device)
-
-
+        
 if __name__ == "__main__":
     trainer = Trainer()
     trainer()

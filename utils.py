@@ -12,7 +12,10 @@ import tarfile
 import numpy as np
 import torch
 import torchaudio
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, DataLoader
+
+from collections import Counter
+from tqdm import tqdm
 
 ### GSC
 label_dict = {
@@ -471,11 +474,6 @@ class PKMTLDataset(Dataset):
             "target_speaker": torch.tensor(anchor_spk)
         }
 
-import os
-import torch
-from torch.utils.data import DataLoader
-from tqdm import tqdm
-
 def preprocess_and_save(dataset, preprocess_fn, device, save_dir, batch_size=256):
     os.makedirs(save_dir, exist_ok=True)
     loader = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=0)
@@ -494,3 +492,16 @@ def preprocess_and_save(dataset, preprocess_fn, device, save_dir, batch_size=256
     torch.save(x_tensor, os.path.join(save_dir, "data.pt"))
     torch.save(y_tensor, os.path.join(save_dir, "labels.pt"))
     print(f"✅ Saved: {x_tensor.shape[0]} samples to {save_dir}")
+
+    if hasattr(dataset, 'speaker2idx'):
+        torch.save(dataset.speaker2idx, f"{save_dir}/speaker2idx.pt")
+        print(f"✅ Saved: {f"{save_dir}/speaker2idx.pt"}")
+
+def show_label_distribution(label_path, label_name="Label"):
+    labels = torch.load(label_path)
+    labels = labels.tolist() if torch.is_tensor(labels) else labels
+
+    counter = Counter(labels)
+    print(f"📊 {label_name} distribution:")
+    for label, count in sorted(counter.items()):
+        print(f"  - Label {label}: {count} samples")
