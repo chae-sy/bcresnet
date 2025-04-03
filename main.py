@@ -5,7 +5,7 @@ import shutil
 import numpy as np
 from glob import glob
 from argparse import ArgumentParser
-from torch.utils.data import DataLoader
+from torch.utils.data import TensorDataset, DataLoader
 from torchvision import transforms
 from tqdm import tqdm
 
@@ -23,6 +23,7 @@ class Trainer:
         parser.add_argument("--download", action="store_true")
         parser.add_argument("--epoch", default=50, type=int)
         parser.add_argument("--batch_size", default=4096, type=int)
+        parser.add_argument("--num_workers", default=4, type=int)
         args = parser.parse_args()
         self.__dict__.update(vars(args))
 
@@ -34,7 +35,13 @@ class Trainer:
             label_path = os.path.join(save_dir, "labels.pt")
             if os.path.exists(data_path) and os.path.exists(label_path):
                 print(f"✅ Cache found in {save_dir}, skipping preprocessing.")
-                return torch.load(data_path), torch.load(label_path)
+                x = torch.load(data_path)
+                y = torch.load(label_path)
+                shuffle = True if case == 'train' else False
+                dataset = TensorDataset(x, y)
+                loader = DataLoader(dataset, batch_size=self.batch_size, shuffle=shuffle, num_workers=self.num_workers)
+
+                print(f"📦 Loaded {len(dataset)} samples from cache ({save_dir})")
             else:
                 self._load_data(case)
         self._load_model()
@@ -120,11 +127,11 @@ class Trainer:
         freq_masking = {1: 0, 1.5: 1, 2: 3, 3: 5, 6: 7, 8: 7}
 
         if case == 'train':
-            self.train_loader=DataLoader(self.data_dataset, batch_size=self.batch_size, shuffle=True, num_workers=4, pin_memory=True)
+            self.train_loader=DataLoader(self.data_dataset, batch_size=self.batch_size, shuffle=True, num_workers=self.num_workers, pin_memory=True)
             self.preprocess_train = Preprocess(noise_dir, self.device, specaug=specaugment, frequency_masking_para=freq_masking[self.tau])
             preprocess_and_save(self.train_dataset, self.preprocess_train, self.device, f"cached/{case}")
         else: 
-            self.valid_loader = DataLoader(self.data_dataset, batch_size=self.batch_size, shuffle=False, num_workers=4, pin_memory=True)
+            self.valid_loader = DataLoader(self.data_dataset, batch_size=self.batch_size, shuffle=False, num_workers=self.num_workers, pin_memory=True)
             self.preprocess_valid = Preprocess(noise_dir, self.device)
             preprocess_and_save(self.valid_dataset, self.preprocess_valid, self.device, f"cached/{case}")
 
