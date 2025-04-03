@@ -9,28 +9,41 @@ import math
 
 
 class CosineClassifier(nn.Module):
+    """
+     w * cosine_similarity (z, w_c) + b
+    
+    w = learnable scaling factor (self.scale)
+    b = optional bias term (not included in the below code)
+    z = input embedding (x)  shape: (batch_size, in_dim)
+    w_c = class weight vector (self.weight) shape: (num_classes, in_dim)
+    
+    """
     def __init__(self, in_dim, num_classes):
         super().__init__()
-        self.weight = nn.Parameter(torch.Tensor(num_classes, in_dim))
-        nn.init.kaiming_uniform_(self.weight, a=math.sqrt(5))
-        self.scale = nn.Parameter(torch.ones(1))
+        self.weight = nn.Parameter(torch.Tensor(num_classes, in_dim)) #self.weight.shape = (num_classes, in_dim)
+        nn.init.kaiming_uniform_(self.weight, a=math.sqrt(5)) #initialize the self.weight values using a Kaiming uniform distribution
+        self.scale = nn.Parameter(torch.ones(1)) #initialize the self.sacle by tensor [1]
 
     def forward(self, x):
         x = normalize(x, dim=1)
         w = normalize(self.weight, dim=1)
-        return self.scale * torch.matmul(x, w.t())
-
+        return self.scale * torch.matmul(x, w.t()) #output shape: [batch_size, num_classes]
 
 class SharedEncoder(nn.Module):
-    def __init__(self, bcresnet_tau3: BCResNets, num_shared_stages=2):
+    def __init__(self, bcresnet: BCResNets, num_shared_blocks=10):
         super().__init__()
-        self.cnn_head = bcresnet_tau3.cnn_head
-        self.body = nn.ModuleList(bcresnet_tau3.BCBlocks[:num_shared_stages])
+        self.cnn_head = bcresnet.cnn_head
+        
+        # Flatten all BCResBlocks
+        all_blocks = [block for stage in bcresnet.BCBlocks for block in stage]
 
-        # Get output channels from the last block in the last kept stage
-        last_stage = bcresnet_tau3.BCBlocks[num_shared_stages - 1]
-        last_block = last_stage[-1]  # last block in that stage
-        self.out_channels = last_block.f1[0].block[0].out_channels  # get from Conv2d layer
+        # First 10 go to shared encoder
+        self.blocks = nn.ModuleList(all_blocks[:num_shared_blocks])
+
+        # Dynamically infer output channels from the last block
+        last_block = self.blocks[-1]
+        self.out_channels = last_block.f1[0].block[0].out_channels
+
 
     def forward(self, x):
         x = self.cnn_head(x)
@@ -42,22 +55,34 @@ class SharedEncoder(nn.Module):
 
 
 class SubNet(nn.Module):
-    def __init__(self, in_channels, out_dim):
+    def __init__(self, bcresnet: BCResNets, start_block=10, out_dim=128):
         super().__init__()
-        self.blocks = nn.Sequential(
-            ConvBNReLU(in_channels, in_channels, idx=4),
-            ConvBNReLU(in_channels, in_channels, idx=5),
+        # Flatten all BCResBlocks
+        all_blocks = [block for stage in bcresnet.BCBlocks for block in stage]
+
+        # Get the last 2 blocks
+        self.blocks = nn.Sequential(*all_blocks[start_block:])
+
+        # Dynamically determine input channels from first block
+        in_channels = all_blocks[start_block].f1[0].block[0].in_channels
+
+        self.head = nn.Sequential(
             nn.AdaptiveAvgPool2d((1, 1)),
             nn.Flatten(),
-            nn.Linear(in_channels, out_dim),
+            nn.Linear(in_channels, out_dim)
         )
 
     def forward(self, x):
-        return self.blocks(x)
+        x = self.blocks(x)
+        return self.head(x)
 
 
 
 class SCM(nn.Module):
+    """
+    simple linear scoring function for both task
+    psi_task = alpha * psi_kws + (1-alpha) * psi_sv
+    """
     def __init__(self, alpha=0.5):
         super().__init__()
         self.alpha = alpha
@@ -67,6 +92,9 @@ class SCM(nn.Module):
 
 
 class TRM(nn.Module):
+    """
+    neural network based scoring function for both task
+    """
     def __init__(self, in_dim):
         super().__init__()
         self.attn_fc1 = nn.Linear(in_dim * 2, 2)
