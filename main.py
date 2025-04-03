@@ -11,7 +11,7 @@ from tqdm import tqdm
 
 from pkmtl import PKMTLNet, train_epoch, evaluate, evaluate_with_far_frr
 from model import BCResNets
-from utils import DownloadDataset, Padding, Preprocess, SpeechCommandWithSpeaker, PKMTLDataset, SplitDataset
+from utils import DownloadDataset, Padding, Preprocess, SpeechCommandWithSpeaker, PKMTLDataset, SplitDataset, preprocess_and_save
 
 
 class Trainer:
@@ -28,7 +28,15 @@ class Trainer:
 
         self.device = torch.device(f"cuda:{self.gpu}" if torch.cuda.is_available() else "cpu")
         print(f'The code is on {self.device}')
-        self._load_data()
+        for case in ['train', 'valid', 'test']:
+            save_dir = f"cached/{case}"
+            data_path = os.path.join(save_dir, "data.pt")
+            label_path = os.path.join(save_dir, "labels.pt")
+            if os.path.exists(data_path) and os.path.exists(label_path):
+                print(f"✅ Cache found in {save_dir}, skipping preprocessing.")
+                return torch.load(data_path), torch.load(label_path)
+            else:
+                self._load_data()
         self._load_model()
 
     def __call__(self):
@@ -119,6 +127,11 @@ class Trainer:
 
         self.preprocess_train = Preprocess(noise_dir, self.device, specaug=specaugment, frequency_masking_para=freq_masking[self.tau])
         self.preprocess_test = Preprocess(noise_dir, self.device)
+
+        preprocess_and_save(self.train_dataset, self.preprocess_train, self.device, "cached/train")
+        preprocess_and_save(self.valid_dataset, self.preprocess_test, self.device, "cached/valid")
+        preprocess_and_save(self.test_dataset,  self.preprocess_test, self.device, "cached/test")
+
 
     def _load_model(self):
         self.model = BCResNets(int(self.tau * 8)).to(self.device)
