@@ -116,20 +116,18 @@ class Trainer:
         transform = transforms.Compose([Padding()])
         print(f"load {case} dataset..")
         self.data_dataset = PKMTLDataset(SpeechCommandWithSpeaker(data_dir, self.ver, transform=transform))
-        if case == 'train':
-            is_shuffle = True
-        else: 
-            is_shuffle = False
-        self.data_loader = DataLoader(self.data_dataset, batch_size=self.batch_size, shuffle=is_shuffle, num_workers=4, pin_memory=True)
-
         specaugment = self.tau >= 1.5
         freq_masking = {1: 0, 1.5: 1, 2: 3, 3: 5, 6: 7, 8: 7}
 
         if case == 'train':
-            self.preprocess_data = Preprocess(noise_dir, self.device, specaug=specaugment, frequency_masking_para=freq_masking[self.tau])
-        else: self.preprocess_data = Preprocess(noise_dir, self.device)
+            self.train_loader=DataLoader(self.data_dataset, batch_size=self.batch_size, shuffle=True, num_workers=4, pin_memory=True)
+            self.preprocess_train = Preprocess(noise_dir, self.device, specaug=specaugment, frequency_masking_para=freq_masking[self.tau])
+            preprocess_and_save(self.train_dataset, self.preprocess_train, self.device, f"cached/{case}")
+        else: 
+            self.valid_loader = DataLoader(self.data_dataset, batch_size=self.batch_size, shuffle=False, num_workers=4, pin_memory=True)
+            self.preprocess_valid = Preprocess(noise_dir, self.device)
+            preprocess_and_save(self.valid_dataset, self.preprocess_valid, self.device, f"cached/{case}")
 
-        preprocess_and_save(self.data_dataset, self.preprocess_data, self.device, f"cached/{case}")
 
 
 
