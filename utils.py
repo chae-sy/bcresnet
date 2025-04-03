@@ -493,7 +493,7 @@ def preprocess_and_save(dataset, preprocess_fn, device, save_dir, batch_size=256
     torch.save(y_tensor, os.path.join(save_dir, "labels.pt"))
     print(f"✅ Saved: {x_tensor.shape[0]} samples to {save_dir}")
 
-    if hasattr(dataset, 'speaker2idx'):
+    if hasattr(dataset.base, 'speaker2idx'):
         torch.save(dataset.speaker2idx, f"{save_dir}/speaker2idx.pt")
         print(f"✅ Saved: {f"{save_dir}/speaker2idx.pt"}")
 
