@@ -8,6 +8,7 @@ from argparse import ArgumentParser
 from torch.utils.data import TensorDataset, DataLoader
 from torchvision import transforms
 from tqdm import tqdm
+from collections import Counter
 
 from pkmtl import PKMTLNet, train_epoch, evaluate, evaluate_with_far_frr
 from model import BCResNets
@@ -31,10 +32,32 @@ class Trainer:
         print(f'The code is on {self.device}')
 
         #load the data & show the label distribution
-        for case in ['train', 'valid']:
-            self._load_data_and_label(case)
-        
+        self._load_data()
         self._load_model()
+        self._show_label_distribution_from_loader(self.train_loader, label_key="target_label", label_name="Train Set")
+        self._show_label_distribution_from_loader(self.valid_loader, label_key="target_label", label_name="Valid Set")
+
+    def _show_label_distribution_from_loader(loader, label_key="target_label", label_name="Label"):
+        """
+        Print the distribution of labels from a DataLoader.
+
+        Args:
+            loader (DataLoader): DataLoader returning batches of dictionaries.
+            label_key (str): Key in the batch dict that contains label tensor. Default is 'target_label'.
+            label_name (str): Label name to show in print output.
+        """
+        all_labels = []
+
+        for batch in loader:
+            labels = batch[label_key]
+            if torch.is_tensor(labels):
+                labels = labels.tolist()
+            all_labels.extend(labels)
+
+        counter = Counter(all_labels)
+        print(f"📊 {label_name} distribution:")
+        for label, count in sorted(counter.items()):
+            print(f"  - Label {label}: {count} samples")
 
     def _load_data_and_label(self, case):
         save_dir = f"cached/{case}"
@@ -130,7 +153,7 @@ class Trainer:
         torch.save(model.state_dict(), file_name)
         print('✅ Model saved:', file_name)
 
-    def _load_data(self, case):
+    def _load_data(self):
         print("Checking dataset...")
         if not os.path.isdir("./data"):
             os.mkdir("./data")
@@ -140,26 +163,37 @@ class Trainer:
             DownloadDataset(base_dir, url)
             SplitDataset(base_dir)
 
-        data_dir = f"{base_dir}/{case}_12class"
+        train_dir = f"{base_dir}/train_12class"
+        valid_dir = f"{base_dir}/valid_12class"
         noise_dir = f"{base_dir}/_background_noise_"
 
         transform = transforms.Compose([Padding()])
-        print(f"load {case} dataset..")
-        
         specaugment = self.tau >= 1.5
         freq_masking = {1: 0, 1.5: 1, 2: 3, 3: 5, 6: 7, 8: 7}
 
-        if case == 'train':
-            self.train_dataset = PKMTLDataset(SpeechCommandWithSpeaker(data_dir, self.ver, transform=transform))
-            self.train_loader=DataLoader(self.train_dataset, batch_size=self.batch_size, shuffle=True, num_workers=self.num_workers, pin_memory=True)
-            self.preprocess_train = Preprocess(noise_dir, self.device, specaug=specaugment, frequency_masking_para=freq_masking[self.tau])
-            preprocess_and_save(self.train_dataset, self.preprocess_train, self.device, f"cached/{case}")
-            self.speaker2idx=self.train_dataset.base.speaker2idx
-        else: 
-            self.valid_dataset = PKMTLDataset(SpeechCommandWithSpeaker(data_dir, self.ver, transform=transform))
-            self.valid_loader = DataLoader(self.valid_dataset, batch_size=self.batch_size, shuffle=False, num_workers=self.num_workers, pin_memory=True)
-            self.preprocess_test = Preprocess(noise_dir, self.device)
-            preprocess_and_save(self.valid_dataset, self.preprocess_test, self.device, f"cached/{case}")
+        print(f"load train dataset..")
+        self.train_dataset = PKMTLDataset(SpeechCommandWithSpeaker(train_dir, self.ver, transform=transform))
+        self.train_loader = DataLoader(self.train_dataset, batch_size=1024, shuffle=True, num_workers=4, pin_memory=True)
+        print(f"load valid dataset..")
+        self.valid_dataset = PKMTLDataset(SpeechCommandWithSpeaker(valid_dir, self.ver, transform=transform))
+        self.valid_loader = DataLoader(self.valid_dataset, batch_size=1024, shuffle=False, num_workers=4, pin_memory=True)
+
+        specaugment = self.tau >= 1.5
+        freq_masking = {1: 0, 1.5: 1, 2: 3, 3: 5, 6: 7, 8: 7}
+
+        self.preprocess_train = Preprocess(noise_dir, self.device, specaug=specaugment, frequency_masking_para=freq_masking[self.tau])
+        self.preprocess_test = Preprocess(noise_dir, self.device)
+        # if case == 'train':
+        #     self.train_dataset = PKMTLDataset(SpeechCommandWithSpeaker(data_dir, self.ver, transform=transform))
+        #     self.train_loader=DataLoader(self.train_dataset, batch_size=self.batch_size, shuffle=True, num_workers=self.num_workers, pin_memory=True)
+        #     self.preprocess_train = Preprocess(noise_dir, self.device, specaug=specaugment, frequency_masking_para=freq_masking[self.tau])
+        #     preprocess_and_save(self.train_dataset, self.preprocess_train, self.device, f"cached/{case}")
+        #     self.speaker2idx=self.train_dataset.base.speaker2idx
+        # else: 
+        #     self.valid_dataset = PKMTLDataset(SpeechCommandWithSpeaker(data_dir, self.ver, transform=transform))
+        #     self.valid_loader = DataLoader(self.valid_dataset, batch_size=self.batch_size, shuffle=False, num_workers=self.num_workers, pin_memory=True)
+        #     self.preprocess_test = Preprocess(noise_dir, self.device)
+        #     preprocess_and_save(self.valid_dataset, self.preprocess_test, self.device, f"cached/{case}")
 
     def _load_model(self):
         self.model = BCResNets(int(self.tau * 8)).to(self.device)

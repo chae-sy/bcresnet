@@ -486,28 +486,28 @@ class PKMTLDataset(Dataset):
             "target_speaker": torch.tensor(anchor_spk)
         }
 
-def preprocess_and_save(dataset, preprocess_fn, device, save_dir, batch_size=256):
-    os.makedirs(save_dir, exist_ok=True)
-    loader = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=0)
+# def preprocess_and_save(dataset, preprocess_fn, device, save_dir, batch_size=256):
+#     os.makedirs(save_dir, exist_ok=True)
+#     loader = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=0)
 
-    all_data, all_labels = [], []
-    for batch in tqdm(loader, desc=f"Preprocessing -> {save_dir}"):
-        x = batch['anchor'].to(device)
-        labels = batch['target_label'].to(device)
-        x = preprocess_fn(x, labels, augment=False, is_train=False)
-        all_data.append(x.cpu())
-        all_labels.append(labels.cpu())
+#     all_data, all_labels = [], []
+#     for batch in tqdm(loader, desc=f"Preprocessing -> {save_dir}"):
+#         x = batch['anchor'].to(device)
+#         labels = batch['target_label'].to(device)
+#         x = preprocess_fn(x, labels, augment=False, is_train=False)
+#         all_data.append(x.cpu())
+#         all_labels.append(labels.cpu())
 
-    x_tensor = torch.cat(all_data)
-    y_tensor = torch.cat(all_labels)
+#     x_tensor = torch.cat(all_data)
+#     y_tensor = torch.cat(all_labels)
 
-    torch.save(x_tensor, os.path.join(save_dir, "data.pt"))
-    torch.save(y_tensor, os.path.join(save_dir, "labels.pt"))
-    print(f"✅ Saved: {x_tensor.shape[0]} samples to {save_dir}")
+#     torch.save(x_tensor, os.path.join(save_dir, "data.pt"))
+#     torch.save(y_tensor, os.path.join(save_dir, "labels.pt"))
+#     print(f"✅ Saved: {x_tensor.shape[0]} samples to {save_dir}")
 
-    if hasattr(dataset.base, 'speaker2idx'):
-        torch.save(dataset.base.speaker2idx, f"{save_dir}/speaker2idx.pt")
-        print(f"✅ Saved: {save_dir}/speaker2idx.pt")
+#     if hasattr(dataset.base, 'speaker2idx'):
+#         torch.save(dataset.base.speaker2idx, f"{save_dir}/speaker2idx.pt")
+#         print(f"✅ Saved: {save_dir}/speaker2idx.pt")
 
 def show_label_distribution(label_path, label_name="Label"):
     labels = torch.load(label_path)
