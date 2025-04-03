@@ -40,7 +40,7 @@ class Trainer:
         save_dir = f"cached/{case}"
         data_path = os.path.join(save_dir, "data.pt")
         label_path = os.path.join(save_dir, "labels.pt")
-        if os.path.exists(data_path) and os.path.exists(label_path) and (case=='train' and os.path.exists(os.path.join(save_dir, "speaker2idx.pt"))):
+        if os.path.exists(data_path) and os.path.exists(label_path) and os.path.exists(os.path.join(save_dir, "speaker2idx.pt")):
             print(f"✅ Cache found in {save_dir}, skipping preprocessing.")
             x = torch.load(data_path)
             y = torch.load(label_path)
