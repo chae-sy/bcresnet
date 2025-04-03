@@ -146,8 +146,8 @@ class Trainer:
         else: 
             self.valid_dataset = PKMTLDataset(SpeechCommandWithSpeaker(data_dir, self.ver, transform=transform))
             self.valid_loader = DataLoader(self.valid_dataset, batch_size=self.batch_size, shuffle=False, num_workers=self.num_workers, pin_memory=True)
-            self.preprocess_valid = Preprocess(noise_dir, self.device)
-            preprocess_and_save(self.valid_dataset, self.preprocess_valid, self.device, f"cached/{case}")
+            self.preprocess_test = Preprocess(noise_dir, self.device)
+            preprocess_and_save(self.valid_dataset, self.preprocess_test, self.device, f"cached/{case}")
 
     def _load_model(self):
         self.model = BCResNets(int(self.tau * 8)).to(self.device)
