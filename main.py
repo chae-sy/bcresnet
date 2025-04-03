@@ -142,7 +142,7 @@ class Trainer:
             self.train_loader=DataLoader(self.train_dataset, batch_size=self.batch_size, shuffle=True, num_workers=self.num_workers, pin_memory=True)
             self.preprocess_train = Preprocess(noise_dir, self.device, specaug=specaugment, frequency_masking_para=freq_masking[self.tau])
             preprocess_and_save(self.train_dataset, self.preprocess_train, self.device, f"cached/{case}")
-            self.speaker2idx=self.train_dataset.speaker2idx
+            self.speaker2idx=self.train_dataset.base.speaker2idx
         else: 
             self.valid_dataset = PKMTLDataset(SpeechCommandWithSpeaker(data_dir, self.ver, transform=transform))
             self.valid_loader = DataLoader(self.valid_dataset, batch_size=self.batch_size, shuffle=False, num_workers=self.num_workers, pin_memory=True)
