@@ -227,10 +227,16 @@ def evaluate_with_far_frr(model, dataloader, device, threshold=0.0, task='scm', 
 
     with torch.no_grad():
         for batch in dataloader:
-            ts_tk = preprocess_fn(batch['ts_tk'][0].unsqueeze(0).to(device), [batch['target_label'].item()]).to(device)
-            ts_ntk = preprocess_fn(batch['ts_ntk'][0].unsqueeze(0).to(device), [batch['target_label'].item()]).to(device)
-            nts_tk = preprocess_fn(batch['nts_tk'][0].unsqueeze(0).to(device), [batch['target_label'].item()]).to(device)
-            nts_ntk = preprocess_fn(batch['nts_ntk'][0].unsqueeze(0).to(device), [batch['target_label'].item()]).to(device)
+            label = batch['target_label']
+            if torch.is_tensor(label) and label.dim() > 0:
+                label = label[0].item()  # safely extract scalar
+            elif torch.is_tensor(label):
+                label = label.item()
+
+            ts_tk = preprocess_fn(batch['ts_tk'][0].unsqueeze(0).to(device), [label]).to(device)
+            ts_ntk = preprocess_fn(batch['ts_ntk'][0].unsqueeze(0).to(device), [label]).to(device)
+            nts_tk = preprocess_fn(batch['nts_tk'][0].unsqueeze(0).to(device), [label]).to(device)
+            nts_ntk = preprocess_fn(batch['nts_ntk'][0].unsqueeze(0).to(device), [label]).to(device)
 
             if task == 'scm':
                 z_k_pos, z_s_pos = model(ts_tk, task='scm')
