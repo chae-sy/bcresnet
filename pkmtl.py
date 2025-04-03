@@ -116,8 +116,8 @@ class PKMTLNet(nn.Module):
         self.shared_encoder = SharedEncoder(backbone, num_shared_blocks=10)
         shared_out_channels = self.shared_encoder.out_channels
 
-        self.kws_subnet = SubNet(start_block=10, out_dim=128)
-        self.sv_subnet = SubNet(start_block=10, out_dim=128)
+        self.kws_subnet = SubNet(backbone, start_block=10, out_dim=128)
+        self.sv_subnet = SubNet(backbone, start_block=10, out_dim=128)
 
         self.kws_classifier = CosineClassifier(embedding_dim, num_keywords)
         self.sv_classifier = CosineClassifier(embedding_dim, num_speakers)
