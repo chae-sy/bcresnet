@@ -44,13 +44,22 @@ class Trainer:
             print(f"✅ Cache found in {save_dir}, skipping preprocessing.")
             x = torch.load(data_path)
             y = torch.load(label_path)
-            shuffle = True if case == 'train' else False
             dataset = TensorDataset(x, y)
+            base_dir = "./data/speech_commands_v0.01"
+            noise_dir = f"{base_dir}/_background_noise_"
+
+            print(f"load {case} dataset..")
+            
+            specaugment = self.tau >= 1.5
+            freq_masking = {1: 0, 1.5: 1, 2: 3, 3: 5, 6: 7, 8: 7}
+
+
             if case=='train':
                 self.train_loader = DataLoader(dataset, batch_size=self.batch_size, shuffle=True, num_workers=self.num_workers)
                 self.speaker2idx = torch.load("cached/train/speaker2idx.pt")
-
+                self.preprocess_train = Preprocess(noise_dir, self.device, specaug=specaugment, frequency_masking_para=freq_masking[self.tau])
             elif case == 'valid':
+                self.preprocess_test = Preprocess(noise_dir, self.device)
                 self.valid_loader = DataLoader(dataset, batch_size=self.batch_size, shuffle=False, num_workers=self.num_workers)
             print(f"📦 Loaded {len(dataset)} samples from cache ({save_dir})")
         else:
