@@ -28,7 +28,7 @@ class Trainer:
 
         self.device = torch.device(f"cuda:{self.gpu}" if torch.cuda.is_available() else "cpu")
         print(f'The code is on {self.device}')
-        for case in ['train', 'valid', 'test']:
+        for case in ['train', 'valid']:
             save_dir = f"cached/{case}"
             data_path = os.path.join(save_dir, "data.pt")
             label_path = os.path.join(save_dir, "labels.pt")
@@ -36,7 +36,7 @@ class Trainer:
                 print(f"✅ Cache found in {save_dir}, skipping preprocessing.")
                 return torch.load(data_path), torch.load(label_path)
             else:
-                self._load_data()
+                self._load_data(case)
         self._load_model()
 
     def __call__(self):
@@ -100,7 +100,7 @@ class Trainer:
         torch.save(model.state_dict(), file_name)
         print('✅ Model saved:', file_name)
 
-    def _load_data(self):
+    def _load_data(self, case):
         print("Checking dataset...")
         if not os.path.isdir("./data"):
             os.mkdir("./data")
@@ -110,27 +110,27 @@ class Trainer:
             DownloadDataset(base_dir, url)
             SplitDataset(base_dir)
 
-        train_dir = f"{base_dir}/train_12class"
-        valid_dir = f"{base_dir}/valid_12class"
+        data_dir = f"{base_dir}/{case}_12class"
         noise_dir = f"{base_dir}/_background_noise_"
 
         transform = transforms.Compose([Padding()])
-        print("load train dataset..")
-        self.train_dataset = PKMTLDataset(SpeechCommandWithSpeaker(train_dir, self.ver, transform=transform))
-        print("load valid dataset..")
-        self.valid_dataset = PKMTLDataset(SpeechCommandWithSpeaker(valid_dir, self.ver, transform=transform))
-        self.train_loader = DataLoader(self.train_dataset, batch_size=self.batch_size, shuffle=True, num_workers=4, pin_memory=True)
-        self.valid_loader = DataLoader(self.valid_dataset, batch_size=self.batch_size, shuffle=False, num_workers=4, pin_memory=True)
+        print(f"load {case} dataset..")
+        self.data_dataset = PKMTLDataset(SpeechCommandWithSpeaker(data_dir, self.ver, transform=transform))
+        if case == 'train':
+            is_shuffle = True
+        else: 
+            is_shuffle = False
+        self.data_loader = DataLoader(self.data_dataset, batch_size=self.batch_size, shuffle=is_shuffle, num_workers=4, pin_memory=True)
 
         specaugment = self.tau >= 1.5
         freq_masking = {1: 0, 1.5: 1, 2: 3, 3: 5, 6: 7, 8: 7}
 
-        self.preprocess_train = Preprocess(noise_dir, self.device, specaug=specaugment, frequency_masking_para=freq_masking[self.tau])
-        self.preprocess_test = Preprocess(noise_dir, self.device)
+        if case == 'train':
+            self.preprocess_data = Preprocess(noise_dir, self.device, specaug=specaugment, frequency_masking_para=freq_masking[self.tau])
+        else: self.preprocess_data = Preprocess(noise_dir, self.device)
 
-        preprocess_and_save(self.train_dataset, self.preprocess_train, self.device, "cached/train")
-        preprocess_and_save(self.valid_dataset, self.preprocess_test, self.device, "cached/valid")
-        preprocess_and_save(self.test_dataset,  self.preprocess_test, self.device, "cached/test")
+        preprocess_and_save(self.data_dataset, self.preprocess_data, self.device, f"cached/{case}")
+
 
 
     def _load_model(self):
