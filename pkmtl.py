@@ -47,9 +47,8 @@ class SharedEncoder(nn.Module):
 
     def forward(self, x):
         x = self.cnn_head(x)
-        for stage in self.body:
-            for block in stage:
-                x = block(x)
+        for block in self.blocks:
+            x = block(x)
         return x
 
 
