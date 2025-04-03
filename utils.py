@@ -168,12 +168,8 @@ class Preprocess:
                 raise ValueError(f"Unsupported label shape: {labels.shape}")
         if augment:
             for idx in range(x.shape[0]):
-<<<<<<< Updated upstream
                 if labels[idx] != 0 and (not is_train or random.random() > noise_prob):
-=======
-                if labels[idx].item() != 0 and (not is_train or random.random() > noise_prob):
                     # if test data or random number > 0.8 (probability of 20%), skip adding noise to the input audio
->>>>>>> Stashed changes
                     continue
                     # if (train data) and randum number < 0.8 (probability of 80%), add noise to the input audio
                 noise_amp = (

@@ -113,11 +113,11 @@ class TRM(nn.Module):
 class PKMTLNet(nn.Module):
     def __init__(self, backbone: BCResNets, embedding_dim=128, num_keywords=12, num_speakers=1881, alpha=0.5):
         super().__init__()
-        self.shared_encoder = SharedEncoder(backbone, num_shared_stages=2)
+        self.shared_encoder = SharedEncoder(backbone, num_shared_blocks=10)
         shared_out_channels = self.shared_encoder.out_channels
 
-        self.kws_subnet = SubNet(in_channels=shared_out_channels, out_dim=embedding_dim)
-        self.sv_subnet = SubNet(in_channels=shared_out_channels, out_dim=embedding_dim)
+        self.kws_subnet = SubNet(start_block=10, out_dim=128)
+        self.sv_subnet = SubNet(start_block=10, out_dim=128)
 
         self.kws_classifier = CosineClassifier(embedding_dim, num_keywords)
         self.sv_classifier = CosineClassifier(embedding_dim, num_speakers)
