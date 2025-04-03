@@ -37,6 +37,16 @@ sample_per_cls_v1 = [1854, 258, 257]
 sample_per_cls_v2 = [3077, 371, 408]
 SR = 16000
 
+unknown_classes = [
+    "zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine",
+    "bed", "bird", "cat", "dog", "happy", "house", "marvin", "sheila", "tree", "wow"
+]
+
+def get_label(class_name):
+    if class_name in unknown_classes:
+        return 1  # label for _unknown_
+    return label_dict.get(class_name, None)
+
 
 def ScanAudioFiles(root_dir, ver):
     sample_per_cls = sample_per_cls_v1 if ver == 1 else sample_per_cls_v2
@@ -351,8 +361,7 @@ def SplitDataset(loc):
         make_empty_audio("%s/%s_12class/_silence_" % (loc, split_name), sample_per_cls[idx]) #make empty audio and append it to _silence_ dir.
         
         
-import random
-from torch.utils.data import Dataset
+
 
 class PKMTLDataset(Dataset):
     """
@@ -396,10 +405,13 @@ class PKMTLDataset(Dataset):
         self.base = base_dataset
         self.index_by_label = {}
         self.index_by_speaker = {}
-
-        for i, (_, label, speaker_id, _) in enumerate(self.base):
+        for i, (_, label, speaker_id, class_name) in enumerate(self.base):
+            if class_name in unknown_classes:
+                logical_label = 1
+            else:
+                logical_label = label
             #ensures that for each label, there's a list in the dictionary, and then it appends index of the data to that list.
-            self.index_by_label.setdefault(label, []).append(i)
+            self.index_by_label.setdefault(logical_label, []).append(i)
             #ensures that for each speaker, there's a list in the dictionary, and then it appends index of the data to that list.
             self.index_by_speaker.setdefault(speaker_id, []).append(i)
 
