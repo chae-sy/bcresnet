@@ -40,7 +40,7 @@ class Trainer:
         save_dir = f"cached/{case}"
         data_path = os.path.join(save_dir, "data.pt")
         label_path = os.path.join(save_dir, "labels.pt")
-        if os.path.exists(data_path) and os.path.exists(label_path):
+        if os.path.exists(data_path) and os.path.exists(label_path) and (case=='train' and os.path.exists(os.path.join(save_dir, "speaker2idx.pt"))):
             print(f"✅ Cache found in {save_dir}, skipping preprocessing.")
             x = torch.load(data_path)
             y = torch.load(label_path)
@@ -133,19 +133,21 @@ class Trainer:
 
         transform = transforms.Compose([Padding()])
         print(f"load {case} dataset..")
-        self.data_dataset = PKMTLDataset(SpeechCommandWithSpeaker(data_dir, self.ver, transform=transform))
+        
         specaugment = self.tau >= 1.5
         freq_masking = {1: 0, 1.5: 1, 2: 3, 3: 5, 6: 7, 8: 7}
 
         if case == 'train':
-            self.train_loader=DataLoader(self.data_dataset, batch_size=self.batch_size, shuffle=True, num_workers=self.num_workers, pin_memory=True)
+            self.train_dataset = PKMTLDataset(SpeechCommandWithSpeaker(data_dir, self.ver, transform=transform))
+            self.train_loader=DataLoader(self.train_dataset, batch_size=self.batch_size, shuffle=True, num_workers=self.num_workers, pin_memory=True)
             self.preprocess_train = Preprocess(noise_dir, self.device, specaug=specaugment, frequency_masking_para=freq_masking[self.tau])
-            preprocess_and_save(self.data_dataset, self.preprocess_train, self.device, f"cached/{case}")
-            self.speaker2idx=self.data_dataset.speaker2idx
+            preprocess_and_save(self.train_dataset, self.preprocess_train, self.device, f"cached/{case}")
+            self.speaker2idx=self.train_dataset.speaker2idx
         else: 
-            self.valid_loader = DataLoader(self.data_dataset, batch_size=self.batch_size, shuffle=False, num_workers=self.num_workers, pin_memory=True)
+            self.valid_dataset = PKMTLDataset(SpeechCommandWithSpeaker(data_dir, self.ver, transform=transform))
+            self.valid_loader = DataLoader(self.valid_dataset, batch_size=self.batch_size, shuffle=False, num_workers=self.num_workers, pin_memory=True)
             self.preprocess_valid = Preprocess(noise_dir, self.device)
-            preprocess_and_save(self.data_dataset, self.preprocess_valid, self.device, f"cached/{case}")
+            preprocess_and_save(self.valid_dataset, self.preprocess_valid, self.device, f"cached/{case}")
 
     def _load_model(self):
         self.model = BCResNets(int(self.tau * 8)).to(self.device)
