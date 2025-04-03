@@ -12,7 +12,7 @@ from collections import Counter
 
 from pkmtl import PKMTLNet, train_epoch, evaluate, evaluate_with_far_frr
 from model import BCResNets
-from utils import show_label_distribution, DownloadDataset, Padding, Preprocess, SpeechCommandWithSpeaker, PKMTLDataset, SplitDataset, preprocess_and_save
+from utils import show_label_distribution, DownloadDataset, Padding, Preprocess, SpeechCommandWithSpeaker, PKMTLDataset, SplitDataset
 
 
 class Trainer:
