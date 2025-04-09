@@ -161,11 +161,7 @@ def train_epoch(model, train_loader, optimizer, device, kws_criterion, sv_criter
     pbar = tqdm(train_loader, desc="Training", leave=False)
     for batch in pbar:
         # === 1) COLLATE ===
-        # batch is a list of sample‐dicts, so stack each key
-        batch = {
-            key: torch.stack([sample[key] for sample in batch], dim=0)
-            for key in batch[0].keys()
-        }
+        # pkmtl_collate created
 
         # === 2) MOVE TO DEVICE ===
         for k, v in batch.items():
