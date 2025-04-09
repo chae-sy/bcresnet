@@ -4,6 +4,7 @@ import torch.nn.functional as F
 from model import BCResNets, ConvBNReLU  # assuming this is the original BCResNet
 from torch.nn.functional import normalize
 from torch.nn.functional import cosine_similarity
+from torch.utils.data._utils.collate import default_collate
 
 import math
 
@@ -166,11 +167,17 @@ def train_epoch(model, train_loader, optimizer, device,
     total_loss = 0.0
 
     pbar = tqdm(train_loader, desc="Training", leave=False)
-    for batch in pbar:
-        # --- 1) Move every tensor in the dict to device ---
+    for raw_batch in pbar:
+        # --- 1) COLLATE if we got a list of samples ---
+        # default_collate will turn List[Dict] → Dict[str,Tensor[B,...]]
+        # and List[Tuple] → Tuple[Tensor[B,...], ...]
+        batch = default_collate(raw_batch) if isinstance(raw_batch, list) else raw_batch
+
+        # --- 2) Move everything to device ---
+        # after collate, batch should be a dict of tensors
         batch = {k: v.to(device, non_blocking=True) for k, v in batch.items()}
 
-        # --- 2) Unpack your five waveforms + labels ---
+        # --- 3) Unpack your five waveforms + labels ---
         a   = batch['anchor']
         t1  = batch['ts_tk']
         t2  = batch['ts_ntk']
@@ -179,13 +186,13 @@ def train_epoch(model, train_loader, optimizer, device,
         lbl = batch['target_label']
         spk = batch['target_speaker']
 
-        # --- 3) Multi‑Task classification loss (Eq.3) ---
+        # --- 4) Stage 1: Multi‑Task Classification Loss ---
         out_kws, out_sv = model(a, task='mtl')
         kw_loss  = kws_criterion(out_kws, lbl)
         sv_loss  = sv_criterion(out_sv, spk) * model.lambda_speaker_loss
         mtl_loss = kw_loss + sv_loss
 
-        # --- 4) TRM metric loss (angular‑proto) ---
+        # --- 5) Stage 2: TRM Metric Loss ---
         z_t_a   = model(a,  task='trm', return_embeddings=True)
         z_t_t1  = model(t1, task='trm', return_embeddings=True)
         z_t_t2  = model(t2, task='trm', return_embeddings=True)
@@ -200,7 +207,7 @@ def train_epoch(model, train_loader, optimizer, device,
             neg_diff = z_t_n2
         )
 
-        # --- 5) Backward + step ---
+        # --- 6) Backward + step ---
         loss = mtl_loss + trm_loss
         optimizer.zero_grad()
         loss.backward()
@@ -214,7 +221,6 @@ def train_epoch(model, train_loader, optimizer, device,
         })
 
     return total_loss / len(train_loader)
-
 
 def evaluate(model, dataloader, device, preprocess_fn):
     model.eval()
