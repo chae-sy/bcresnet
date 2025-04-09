@@ -8,6 +8,7 @@ from argparse import ArgumentParser
 from torch.utils.data import TensorDataset, DataLoader
 from torchvision import transforms
 from tqdm import tqdm
+import torch.nn as nn
 
 from pkmtl import PKMTLNet, train_epoch, evaluate, evaluate_with_far_frr
 from model import BCResNets
@@ -71,11 +72,17 @@ class Trainer:
         frr_list, far_list, acc_list = [], [], []
         alpha_grid = np.linspace(0.0, 1.0, 11)
         threshold_grid = np.linspace(-1.0, 1.0, 101)
+        
+        # keyword‐spotting loss
+        kws_criterion = nn.CrossEntropyLoss()
+
+        # speaker‐verification (classification) loss
+        sv_criterion  = nn.CrossEntropyLoss()
 
         for split in range(10):
             print(f"\n🔁 Evaluating Split {split + 1}/10")
             for epoch in range(total_epoch):
-                train_loss = train_epoch(model, self.train_loader, optimizer, self.device, self.preprocess_train)
+                train_loss = train_epoch(model, self.train_loader, optimizer, self.device, kws_criterion, sv_criterion)
 
             best_alpha, best_thresh, best_frr = self.grid_search_threshold_alpha(model, self.valid_loader, alpha_grid, threshold_grid)
             print(f"Best Alpha: {best_alpha:.2f}, Best Threshold: {best_thresh:.2f}, FRR: {best_frr:.4f}")
