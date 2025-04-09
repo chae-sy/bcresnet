@@ -5,7 +5,7 @@ from model import BCResNets, ConvBNReLU  # assuming this is the original BCResNe
 from torch.nn.functional import normalize
 from torch.nn.functional import cosine_similarity
 from torch.utils.data._utils.collate import default_collate
-import tqdm from tqdm
+from tqdm import tqdm
 import math
 
 
@@ -157,38 +157,18 @@ def compute_mtl_loss(out_kws, out_sv, label_kws, label_sv, lambda_speaker=0.1):
 def train_epoch(model, train_loader, optimizer, device,
                 kws_criterion, sv_criterion):
     model.train()
+    for batch in train_loader:
+        print(type(batch))          # list인지 tuple인지 확인
+        print(len(batch))
+        print(type(batch[0]))       # 첫 번째 샘플
+        print(batch[0])             # 내용 확인
+        print(batch[1])
+        break
+
     total_loss = 0.0
 
     pbar = tqdm(train_loader, desc="Training", leave=False)
     for batch in pbar:
-        # --- COLLATE if needed ---
-        if isinstance(batch, dict):
-            collated = batch
-        elif isinstance(batch, list):
-            first = batch[0]
-            if isinstance(first, dict):
-                # list of dicts → dict of stacked tensors
-                collated = {
-                    k: torch.stack([sample[k] for sample in batch], 0)
-                    for k in first.keys()
-                }
-            elif torch.is_tensor(first):
-                # list of Tensors → assume tuple ordering from your __getitem__
-                # e.g. (anchor, ts_tk, ts_ntk, nts_tk, nts_ntk, label, speaker)
-                a, t1, t2, n1, n2, lbl, spk = zip(*batch)
-                collated = {
-                    'anchor':         torch.stack(a, 0),
-                    'ts_tk':          torch.stack(t1,0),
-                    'ts_ntk':         torch.stack(t2,0),
-                    'nts_tk':         torch.stack(n1,0),
-                    'nts_ntk':        torch.stack(n2,0),
-                    'target_label':   torch.tensor(lbl, dtype=torch.long),
-                    'target_speaker': torch.tensor(spk, dtype=torch.long),
-                }
-            else:
-                raise RuntimeError(f"Can't collate batch element type {type(first)}")
-        else:
-            raise RuntimeError(f"Unexpected batch type: {type(batch)}")
         
         # — Move every tensor in the batch to the right device —
         batch = {k: v.to(device, non_blocking=True) for k, v in batch}
