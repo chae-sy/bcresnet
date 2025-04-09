@@ -82,7 +82,7 @@ class Trainer:
         for split in range(10):
             print(f"\n🔁 Evaluating Split {split + 1}/10")
             for epoch in range(total_epoch):
-                train_loss, loss_kws, loss_sv = train_epoch(model, self.train_loader, optimizer, self.device, self.preprocess_train)
+                train_loss = train_epoch(model, self.train_loader, optimizer, self.device, self.preprocess_train)
 
             best_alpha, best_thresh, best_frr = self.grid_search_threshold_alpha(model, self.valid_loader, alpha_grid, threshold_grid)
             print(f"Best Alpha: {best_alpha:.2f}, Best Threshold: {best_thresh:.2f}, FRR: {best_frr:.4f}")

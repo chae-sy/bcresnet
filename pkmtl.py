@@ -20,7 +20,7 @@ class CosineClassifier(nn.Module):
     """
     def __init__(self, in_dim, num_classes):
         super().__init__()
-        self.weight = nn.Parameter(torch.Tensor(num_classes, in_dim)) #self.weight.shape = (num_classes, in_dim)
+        self.weight = nn.Parameter(torch.Tensor(num_classes, in_dim)) #self.weight.shape = (num_classes, in_dim) # W \in R^{C×d} W_k, the prototype for class k.
         nn.init.kaiming_uniform_(self.weight, a=math.sqrt(5)) #initialize the self.weight values using a Kaiming uniform distribution
         self.scale = nn.Parameter(torch.ones(1)) #initialize the self.sacle by tensor [1]
 
@@ -155,39 +155,67 @@ def compute_mtl_loss(out_kws, out_sv, label_kws, label_sv, lambda_speaker=0.1):
 
 from tqdm import tqdm
 
-def train_epoch(model, dataloader, optimizer, device, preprocess_fn, epoch_idx=None):
+def train_epoch(model, train_loader, optimizer, device, kws_criterion, sv_criterion):
     model.train()
-    total_loss, total_kws, total_sv = 0.0, 0.0, 0.0
+    total_loss = 0.0
 
-    # Show progress bar for each epoch on a separate line
-    desc = f"📦 Epoch {epoch_idx+1}" if epoch_idx is not None else "📦 Training"
-    progress_bar = tqdm(dataloader, desc=desc, leave=True)
+    # tqdm over batches
+    pbar = tqdm(train_loader, desc="Training", leave=False)
+    for batch in pbar:
+        # 1) Move everything to device
+        for k, v in batch.items():
+            batch[k] = v.to(device)
 
-    for batch in progress_bar:
-        anchor, target_label, target_speaker = map(lambda t: t.to(device, non_blocking=True), 
-                                           (batch['anchor'], batch['target_label'], batch['target_speaker']))
+        # 2) Unpack
+        a   = batch['anchor']
+        t1  = batch['ts_tk']
+        t2  = batch['ts_ntk']
+        n1  = batch['nts_tk']
+        n2  = batch['nts_ntk']
+        lbl = batch['target_label']
+        spk = batch['target_speaker']
 
-        x = preprocess_fn(anchor, target_label)
-        label_kws = target_label
-        label_sv = target_speaker
+        # --- Stage 1: Multi‑Task Classification Loss (Eq.3) ---
+        out_kws, out_sv = model(a, task='mtl')
+        kw_loss = kws_criterion(out_kws, lbl)
+        sv_loss = sv_criterion(out_sv, spk) * model.lambda_speaker_loss
+        mtl_loss = kw_loss + sv_loss
 
+        # --- Stage 2: Task‑Adaptation Metric Loss (TRM) ---
+        # get task‑specific embeddings
+        z_t_a   = model(a,  task='trm', return_embeddings=True)
+        z_t_t1  = model(t1, task='trm', return_embeddings=True)
+        z_t_t2  = model(t2, task='trm', return_embeddings=True)
+        z_t_n1  = model(n1, task='trm', return_embeddings=True)
+        z_t_n2  = model(n2, task='trm', return_embeddings=True)
+
+        trm_loss = model.trm.angular_prototypical_loss(
+            anchor   = z_t_a,
+            pos_same = z_t_t1,
+            neg_same = z_t_n1,
+            pos_diff = z_t_t2,
+            neg_diff = z_t_n2
+        )
+
+        # 3) Combine and step
+        loss = mtl_loss + trm_loss
         optimizer.zero_grad()
-        out_kws, out_sv = model(x, task='mtl')
-        loss, loss_kws, loss_sv = compute_mtl_loss(out_kws, out_sv, label_kws, label_sv)
         loss.backward()
         optimizer.step()
 
         total_loss += loss.item()
-        total_kws += loss_kws
-        total_sv += loss_sv
 
-        progress_bar.set_postfix({
-            "Loss": f"{loss.item():.4f}",
-            "KWS": f"{loss_kws:.4f}",
-            "SV": f"{loss_sv:.4f}"
+        # 4) Update tqdm with the individual losses
+        pbar.set_postfix({
+            "kw_loss": f"{kw_loss.item():.4f}",
+            "sv_loss": f"{sv_loss.item():.4f}",
+            "trm_loss": f"{trm_loss.item():.4f}"
         })
 
-    return total_loss / len(dataloader), total_kws / len(dataloader), total_sv / len(dataloader)
+    avg_loss = total_loss / len(train_loader)
+    return avg_loss
+
+
 
 def evaluate(model, dataloader, device, preprocess_fn):
     model.eval()
