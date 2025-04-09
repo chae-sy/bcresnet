@@ -158,6 +158,8 @@ from tqdm import tqdm
 from tqdm import tqdm
 import torch
 
+from tqdm import tqdm
+
 def train_epoch(model, train_loader, optimizer, device,
                 kws_criterion, sv_criterion):
     model.train()
@@ -165,60 +167,31 @@ def train_epoch(model, train_loader, optimizer, device,
 
     pbar = tqdm(train_loader, desc="Training", leave=False)
     for batch in pbar:
-        # --- COLLATE if needed ---
-        if isinstance(batch, dict):
-            collated = batch
-        elif isinstance(batch, list):
-            first = batch[0]
-            if isinstance(first, dict):
-                # list of dicts → dict of stacked tensors
-                collated = {
-                    k: torch.stack([sample[k] for sample in batch], 0)
-                    for k in first.keys()
-                }
-            elif torch.is_tensor(first):
-                # list of Tensors → assume tuple ordering from your __getitem__
-                # e.g. (anchor, ts_tk, ts_ntk, nts_tk, nts_ntk, label, speaker)
-                a, t1, t2, n1, n2, lbl, spk = zip(*batch)
-                collated = {
-                    'anchor':         torch.stack(a, 0),
-                    'ts_tk':          torch.stack(t1,0),
-                    'ts_ntk':         torch.stack(t2,0),
-                    'nts_tk':         torch.stack(n1,0),
-                    'nts_ntk':        torch.stack(n2,0),
-                    'target_label':   torch.tensor(lbl, dtype=torch.long),
-                    'target_speaker': torch.tensor(spk, dtype=torch.long),
-                }
-            else:
-                raise RuntimeError(f"Can't collate batch element type {type(first)}")
-        else:
-            raise RuntimeError(f"Unexpected batch type: {type(batch)}")
+        # --- 1) Move every tensor in the dict to device ---
+        batch = {k: v.to(device, non_blocking=True) for k, v in batch.items()}
 
-        # --- MOVE TO DEVICE ---
-        for k,v in collated.items():
-            collated[k] = v.to(device)
+        # --- 2) Unpack your five waveforms + labels ---
+        a   = batch['anchor']
+        t1  = batch['ts_tk']
+        t2  = batch['ts_ntk']
+        n1  = batch['nts_tk']
+        n2  = batch['nts_ntk']
+        lbl = batch['target_label']
+        spk = batch['target_speaker']
 
-        # --- UNPACK & FORWARD/LOSS/STEP (as before) ---
-        a   = collated['anchor']
-        t1  = collated['ts_tk']
-        t2  = collated['ts_ntk']
-        n1  = collated['nts_tk']
-        n2  = collated['nts_ntk']
-        lbl = collated['target_label']
-        spk = collated['target_speaker']
-
-        # 1) MTL classification
+        # --- 3) Multi‑Task classification loss (Eq.3) ---
         out_kws, out_sv = model(a, task='mtl')
         kw_loss  = kws_criterion(out_kws, lbl)
         sv_loss  = sv_criterion(out_sv, spk) * model.lambda_speaker_loss
         mtl_loss = kw_loss + sv_loss
 
-        # 2) TRM metric loss
+        # --- 4) TRM metric loss (angular‑proto) ---
         z_t_a   = model(a,  task='trm', return_embeddings=True)
         z_t_t1  = model(t1, task='trm', return_embeddings=True)
         z_t_t2  = model(t2, task='trm', return_embeddings=True)
         z_t_n1  = model(n1, task='trm', return_embeddings=True)
         z_t_n2  = model(n2, task='trm', return_embeddings=True)
+
         trm_loss = model.trm.angular_prototypical_loss(
             anchor   = z_t_a,
             pos_same = z_t_t1,
@@ -227,6 +200,7 @@ def train_epoch(model, train_loader, optimizer, device,
             neg_diff = z_t_n2
         )
 
+        # --- 5) Backward + step ---
         loss = mtl_loss + trm_loss
         optimizer.zero_grad()
         loss.backward()
@@ -240,6 +214,7 @@ def train_epoch(model, train_loader, optimizer, device,
         })
 
     return total_loss / len(train_loader)
+
 
 def evaluate(model, dataloader, device, preprocess_fn):
     model.eval()
