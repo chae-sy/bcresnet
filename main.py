@@ -62,13 +62,13 @@ class Trainer:
             shuffle = True if case == 'train' else False
             dataset = TensorDataset(x, y)
             if case=='train':
-                self.train_loader = DataLoader(dataset, batch_size=self.batch_size, shuffle=True, collate_fn=pkmtl_collate,num_workers=self.num_workers)
+                self.train_loader = DataLoader(dataset, batch_size=self.batch_size, shuffle=True, collate_fn=self.pkmtl_collate, num_workers=self.num_workers)
                 self.speaker2idx = torch.load("cached/train/speaker2idx.pt")
                 self.preprocess_train = Preprocess(noise_dir, self.device, specaug=specaugment, frequency_masking_para=freq_masking[self.tau])
 
             elif case == 'valid':
                 self.preprocess_test = Preprocess(noise_dir, self.device)
-                self.valid_loader = DataLoader(dataset, batch_size=self.batch_size, shuffle=False, collate_fn=pkmtl_collate, num_workers=self.num_workers)
+                self.valid_loader = DataLoader(dataset, batch_size=self.batch_size, shuffle=False, collate_fn=self.pkmtl_collate, num_workers=self.num_workers)
             print(f"📦 Loaded {len(dataset)} samples from cache ({save_dir})")
         else:
             self._load_data(case)
@@ -162,13 +162,13 @@ class Trainer:
 
         if case == 'train':
             self.train_dataset = PKMTLDataset(SpeechCommandWithSpeaker(data_dir, self.ver, transform=transform))
-            self.train_loader=DataLoader(self.train_dataset, batch_size=self.batch_size, shuffle=True, collate_fn=pkmtl_collate, num_workers=self.num_workers, pin_memory=True)
+            self.train_loader=DataLoader(self.train_dataset, batch_size=self.batch_size, shuffle=True, collate_fn=self.pkmtl_collate, num_workers=self.num_workers, pin_memory=True)
             self.preprocess_train = Preprocess(noise_dir, self.device, specaug=specaugment, frequency_masking_para=freq_masking[self.tau])
             preprocess_and_save(self.train_dataset, self.preprocess_train, self.device, f"cached/{case}")
             self.speaker2idx=self.train_dataset.base.speaker2idx
         else: 
             self.valid_dataset = PKMTLDataset(SpeechCommandWithSpeaker(data_dir, self.ver, transform=transform))
-            self.valid_loader = DataLoader(self.valid_dataset, batch_size=self.batch_size, shuffle=False, collate_fn=pkmtl_collate, num_workers=self.num_workers, pin_memory=True)
+            self.valid_loader = DataLoader(self.valid_dataset, batch_size=self.batch_size, shuffle=False, collate_fn=self.pkmtl_collate, num_workers=self.num_workers, pin_memory=True)
             self.preprocess_test = Preprocess(noise_dir, self.device)
             preprocess_and_save(self.valid_dataset, self.preprocess_test, self.device, f"cached/{case}")
 
