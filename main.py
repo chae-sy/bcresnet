@@ -39,9 +39,14 @@ class Trainer:
 
     def _load_data_and_label(self, case):
         save_dir = f"cached/{case}"
+        base_dir = "./data/speech_commands_v0.01"
+        noise_dir = f"{base_dir}/_background_noise_"
         data_path = os.path.join(save_dir, "data.pt")
         label_path = os.path.join(save_dir, "labels.pt")
-        if os.path.exists(data_path) and os.path.exists(label_path) and (case=='train' and os.path.exists(os.path.join(save_dir, "speaker2idx.pt"))):
+        specaugment = self.tau >= 1.5
+        freq_masking = {1: 0, 1.5: 1, 2: 3, 3: 5, 6: 7, 8: 7}
+
+        if os.path.exists(data_path) and os.path.exists(label_path) and  os.path.exists(os.path.join(save_dir, "speaker2idx.pt")):
             print(f"✅ Cache found in {save_dir}, skipping preprocessing.")
             x = torch.load(data_path)
             y = torch.load(label_path)
@@ -50,8 +55,10 @@ class Trainer:
             if case=='train':
                 self.train_loader = DataLoader(dataset, batch_size=self.batch_size, shuffle=True, num_workers=self.num_workers)
                 self.speaker2idx = torch.load("cached/train/speaker2idx.pt")
+                self.preprocess_train = Preprocess(noise_dir, self.device, specaug=specaugment, frequency_masking_para=freq_masking[self.tau])
 
             elif case == 'valid':
+                self.preprocess_test = Preprocess(noise_dir, self.device)
                 self.valid_loader = DataLoader(dataset, batch_size=self.batch_size, shuffle=False, num_workers=self.num_workers)
             print(f"📦 Loaded {len(dataset)} samples from cache ({save_dir})")
         else:
