@@ -155,41 +155,70 @@ def compute_mtl_loss(out_kws, out_sv, label_kws, label_sv, lambda_speaker=0.1):
 
 from tqdm import tqdm
 
-def train_epoch(model, train_loader, optimizer, device, kws_criterion, sv_criterion):
+from tqdm import tqdm
+import torch
+
+def train_epoch(model, train_loader, optimizer, device,
+                kws_criterion, sv_criterion):
     model.train()
     total_loss = 0.0
+
     pbar = tqdm(train_loader, desc="Training", leave=False)
     for batch in pbar:
-        # === 1) COLLATE ===
-        # pkmtl_collate created
+        # --- COLLATE if needed ---
+        if isinstance(batch, dict):
+            collated = batch
+        elif isinstance(batch, list):
+            first = batch[0]
+            if isinstance(first, dict):
+                # list of dicts → dict of stacked tensors
+                collated = {
+                    k: torch.stack([sample[k] for sample in batch], 0)
+                    for k in first.keys()
+                }
+            elif torch.is_tensor(first):
+                # list of Tensors → assume tuple ordering from your __getitem__
+                # e.g. (anchor, ts_tk, ts_ntk, nts_tk, nts_ntk, label, speaker)
+                a, t1, t2, n1, n2, lbl, spk = zip(*batch)
+                collated = {
+                    'anchor':         torch.stack(a, 0),
+                    'ts_tk':          torch.stack(t1,0),
+                    'ts_ntk':         torch.stack(t2,0),
+                    'nts_tk':         torch.stack(n1,0),
+                    'nts_ntk':        torch.stack(n2,0),
+                    'target_label':   torch.tensor(lbl, dtype=torch.long),
+                    'target_speaker': torch.tensor(spk, dtype=torch.long),
+                }
+            else:
+                raise RuntimeError(f"Can't collate batch element type {type(first)}")
+        else:
+            raise RuntimeError(f"Unexpected batch type: {type(batch)}")
 
-        # === 2) MOVE TO DEVICE ===
-        for k, v in batch.items():
-            batch[k] = v.to(device)
+        # --- MOVE TO DEVICE ---
+        for k,v in collated.items():
+            collated[k] = v.to(device)
 
-        # === 3) UNPACK ===
-        a   = batch['anchor']
-        t1  = batch['ts_tk']
-        t2  = batch['ts_ntk']
-        n1  = batch['nts_tk']
-        n2  = batch['nts_ntk']
-        lbl = batch['target_label']
-        spk = batch['target_speaker']
+        # --- UNPACK & FORWARD/LOSS/STEP (as before) ---
+        a   = collated['anchor']
+        t1  = collated['ts_tk']
+        t2  = collated['ts_ntk']
+        n1  = collated['nts_tk']
+        n2  = collated['nts_ntk']
+        lbl = collated['target_label']
+        spk = collated['target_speaker']
 
-        # === 4) STAGE 1: MTL CLASSIFICATION LOSS (Eq.3) ===
+        # 1) MTL classification
         out_kws, out_sv = model(a, task='mtl')
         kw_loss  = kws_criterion(out_kws, lbl)
         sv_loss  = sv_criterion(out_sv, spk) * model.lambda_speaker_loss
         mtl_loss = kw_loss + sv_loss
 
-        # === 5) STAGE 2: TRM METRIC LOSS ===
-        # get task‐specific embeddings
+        # 2) TRM metric loss
         z_t_a   = model(a,  task='trm', return_embeddings=True)
         z_t_t1  = model(t1, task='trm', return_embeddings=True)
         z_t_t2  = model(t2, task='trm', return_embeddings=True)
         z_t_n1  = model(n1, task='trm', return_embeddings=True)
         z_t_n2  = model(n2, task='trm', return_embeddings=True)
-
         trm_loss = model.trm.angular_prototypical_loss(
             anchor   = z_t_a,
             pos_same = z_t_t1,
@@ -198,15 +227,12 @@ def train_epoch(model, train_loader, optimizer, device, kws_criterion, sv_criter
             neg_diff = z_t_n2
         )
 
-        # === 6) BACKWARD & STEP ===
         loss = mtl_loss + trm_loss
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
 
         total_loss += loss.item()
-
-        # === 7) UPDATE PROGRESS BAR ===
         pbar.set_postfix({
             "kw_loss":  f"{kw_loss.item():.4f}",
             "sv_loss":  f"{sv_loss.item():.4f}",
