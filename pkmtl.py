@@ -158,15 +158,20 @@ from tqdm import tqdm
 def train_epoch(model, train_loader, optimizer, device, kws_criterion, sv_criterion):
     model.train()
     total_loss = 0.0
-
-    # tqdm over batches
     pbar = tqdm(train_loader, desc="Training", leave=False)
     for batch in pbar:
-        # 1) Move everything to device
+        # === 1) COLLATE ===
+        # batch is a list of sample‐dicts, so stack each key
+        batch = {
+            key: torch.stack([sample[key] for sample in batch], dim=0)
+            for key in batch[0].keys()
+        }
+
+        # === 2) MOVE TO DEVICE ===
         for k, v in batch.items():
             batch[k] = v.to(device)
 
-        # 2) Unpack
+        # === 3) UNPACK ===
         a   = batch['anchor']
         t1  = batch['ts_tk']
         t2  = batch['ts_ntk']
@@ -175,14 +180,14 @@ def train_epoch(model, train_loader, optimizer, device, kws_criterion, sv_criter
         lbl = batch['target_label']
         spk = batch['target_speaker']
 
-        # --- Stage 1: Multi‑Task Classification Loss (Eq.3) ---
+        # === 4) STAGE 1: MTL CLASSIFICATION LOSS (Eq.3) ===
         out_kws, out_sv = model(a, task='mtl')
-        kw_loss = kws_criterion(out_kws, lbl)
-        sv_loss = sv_criterion(out_sv, spk) * model.lambda_speaker_loss
+        kw_loss  = kws_criterion(out_kws, lbl)
+        sv_loss  = sv_criterion(out_sv, spk) * model.lambda_speaker_loss
         mtl_loss = kw_loss + sv_loss
 
-        # --- Stage 2: Task‑Adaptation Metric Loss (TRM) ---
-        # get task‑specific embeddings
+        # === 5) STAGE 2: TRM METRIC LOSS ===
+        # get task‐specific embeddings
         z_t_a   = model(a,  task='trm', return_embeddings=True)
         z_t_t1  = model(t1, task='trm', return_embeddings=True)
         z_t_t2  = model(t2, task='trm', return_embeddings=True)
@@ -197,7 +202,7 @@ def train_epoch(model, train_loader, optimizer, device, kws_criterion, sv_criter
             neg_diff = z_t_n2
         )
 
-        # 3) Combine and step
+        # === 6) BACKWARD & STEP ===
         loss = mtl_loss + trm_loss
         optimizer.zero_grad()
         loss.backward()
@@ -205,17 +210,14 @@ def train_epoch(model, train_loader, optimizer, device, kws_criterion, sv_criter
 
         total_loss += loss.item()
 
-        # 4) Update tqdm with the individual losses
+        # === 7) UPDATE PROGRESS BAR ===
         pbar.set_postfix({
-            "kw_loss": f"{kw_loss.item():.4f}",
-            "sv_loss": f"{sv_loss.item():.4f}",
+            "kw_loss":  f"{kw_loss.item():.4f}",
+            "sv_loss":  f"{sv_loss.item():.4f}",
             "trm_loss": f"{trm_loss.item():.4f}"
         })
 
-    avg_loss = total_loss / len(train_loader)
-    return avg_loss
-
-
+    return total_loss / len(train_loader)
 
 def evaluate(model, dataloader, device, preprocess_fn):
     model.eval()
