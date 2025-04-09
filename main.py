@@ -38,7 +38,7 @@ class Trainer:
         self._load_model()
 
     
-    def pkmtl_collate(batch):
+    def pkmtl_collate(self, batch):
         # batch: List[Dict[str,Tensor]]
         return {
             k: torch.stack([sample[k] for sample in batch], dim=0)
