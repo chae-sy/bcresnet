@@ -13,7 +13,7 @@ from torch.utils.data import DataLoader
 from torchvision import transforms
 from tqdm import tqdm
 
-from bcresnet import BCResNets
+from bcresnet import BCResNets, PACTActivation
 from utils import DownloadDataset, Padding, Preprocess, SpeechCommand, SplitDataset
 
 
@@ -90,7 +90,12 @@ class Trainer:
             with torch.no_grad():
                 self.model.eval()
                 valid_acc = self.Test(self.valid_dataset, self.valid_loader, augment=True)
-                print("valid acc: %.3f" % (valid_acc))
+                print("valid acc: %.3f" % (valid_acc))\
+                
+            ## ---- PACT ---- ##
+            for name, m in self.model.named_modules():
+                if isinstance(m, PACTActivation):
+                    print(f"epoch {epoch:02d} │ {name}.alpha = {m.alpha.item():.4f}")
 
         test_acc = self.Test(self.test_dataset, self.test_loader, augment=True)  # official testset
         print("test acc: %.3f" % (test_acc))
