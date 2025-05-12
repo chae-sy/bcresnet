@@ -256,6 +256,7 @@ class BCResNets(nn.Module):
         self.apply(_weights_init)
 
     def forward(self, x):
+        x = F.tanh(x)
         x = self.cnn_head(x)
         for i, num_modules in enumerate(self.n):
             for j in range(num_modules):
