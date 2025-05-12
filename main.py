@@ -56,7 +56,13 @@ class Trainer:
         n_step_warmup = len(self.train_loader) * warmup_epoch
         total_iter = len(self.train_loader) * total_epoch
         iterations = 0
+        for group in optimizer.param_groups:
+            for p in group['params']:
+                print([name for name, v in self.model.named_parameters() if v is p])
 
+        for name, module in self.model.named_modules():
+            if isinstance(module, PACTActivation):
+                print(name, "requires_grad:", module.alpha.requires_grad)
         # train
         for epoch in range(total_epoch):
             self.model.train()
@@ -91,11 +97,11 @@ class Trainer:
                 self.model.eval()
                 valid_acc = self.Test(self.valid_dataset, self.valid_loader, augment=True)
                 print("valid acc: %.3f" % (valid_acc))\
-                
+                                
             ## ---- PACT ---- ##
             for name, m in self.model.named_modules():
                 if isinstance(m, PACTActivation):
-                    print(f"epoch {epoch:02d} │ {name}.alpha = {m.alpha.item():.4f}")
+                    print(f"epoch {epoch:02d} │ {name}.alpha = {m.alpha.item():.4f} alpha.grad = {m.alpha.grad.item():.4e}")
 
         test_acc = self.Test(self.test_dataset, self.test_loader, augment=True)  # official testset
         print("test acc: %.3f" % (test_acc))

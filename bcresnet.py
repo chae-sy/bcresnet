@@ -7,42 +7,39 @@ import torch.nn.functional as F
 from torch import nn
 
 from subspectralnorm import SubSpectralNorm
-
 class ActFn(Function):
-	@staticmethod
-	def forward(ctx, x, alpha, k=8):
-		"""_summary_
+    @staticmethod
+    def forward(ctx, x, alpha, k=8):
+        """
+        summary
 
-		Args:
-			ctx (_type_): Context object that can be used to save information for the backward pass.
-			x (_type_): input
-			alpha (_type_): alpha for restricting the max value of ReLU
-			k (_type_): number of bits for quantization
+        Args:
+            ctx (_type_): Context object that can be used to save information for the backward pass.
+            x (_type_): input
+            alpha (_type_): alpha for restricting the max value of ReLU
+            k (_type_): number of bits for quantization
+        Returns:
+            y_q (_type_): quantized output of PACT 
+        """
+        ctx.save_for_backward(x, alpha)
+        y = torch.relu(x)
+        y = torch.minimum(x, alpha)
+        scale = (2**k - 1) / alpha
+        y_q = torch.round(y * scale) / scale
+        return y_q
 
-		Returns:
-			y_q (_type_): quantized output of PACT 
-		"""
-		ctx.save_for_backward(x, alpha)
-		y = torch.clamp(x, min = 0, max = alpha.item())
-		scale = (2**k - 1) / alpha
-		y_q = torch.round( y * scale) / scale
-		return y_q
-
-	@staticmethod
-	def backward(ctx, dLdy_q):
-		# Backward function, I borrowed code from
-		# https://github.com/obilaniu/GradOverride/blob/master/functional.py
-		# We get dL / dy_q as a gradient
-		x, alpha, = ctx.saved_tensors
-		# Weight gradient is only valid when [0, alpha]
-		# Actual gradient for alpha,
-		# By applying Chain Rule, we get dL / dy_q * dy_q / dy * dy / dalpha
-		# dL / dy_q = argument,  dy_q / dy * dy / dalpha = 0, 1 with x value range 
-		lower_bound      = x < 0
-		upper_bound      = x > alpha
-		x_range = ~(lower_bound|upper_bound)
-		grad_alpha = torch.sum(dLdy_q * torch.ge(x, alpha).float()).view(-1)
-		return dLdy_q * x_range.float(), grad_alpha, None
+    @staticmethod
+    def backward(ctx, dLdy_q):
+        """
+        # Backward function, borrowed code from...
+        """
+        x, alpha = ctx.saved_tensors
+        lower_bound = x < 0
+        upper_bound = x > alpha
+        mask = ~(lower_bound | upper_bound)
+        grad_alpha = torch.sum(dLdy_q * (x >= alpha).float())
+        grad_x = dLdy_q * mask.float()
+        return grad_x, grad_alpha, None
 
 def _weights_init(m):
     """
@@ -54,19 +51,29 @@ def _weights_init(m):
         init.kaiming_normal_(m.weight) # Kaiming Normal Initialization
 
 class PACTActivation(nn.Module):
-    """
-    A module wrapper so we can plug the PACT quant‑ReLU into nn.Sequential.
-    alpha becomes a learnable parameter; k (bit‑width) is fixed at construction.
-    """
-    def __init__(self, k: int = 8, alpha_init: float = 6.0):
+    def __init__(self, k: int = 8, alpha_init: float = 6.0, eps: float = 1e-3):
         super().__init__()
-        self.k = k
-        # alpha is usually channel‑wise or tensor‑wise; here it's scalar
+        self.k   = k
+        self.eps = eps
+        # scalar alpha
         self.alpha = nn.Parameter(torch.tensor(alpha_init))
 
     def forward(self, x):
-        # ActFn.apply(*inputs) is the autograd‑aware call
-        return ActFn.apply(x, self.alpha, self.k)
+        # 1) autograd 경로를 유지하며 alpha를 eps 이상으로 clamp
+        alpha = torch.clamp(self.alpha, min=self.eps)
+
+        # 2) tensor 버전 clamp → alpha.item() 제거
+        y = torch.relu(x)
+        y=torch.minimum(y, alpha)
+
+        # 3) numerically safe한 scale 계산
+        qmax  = float(2**self.k - 1)
+        scale = qmax / alpha
+
+        # 4) quantization
+        y_q = torch.round(y * scale) / scale
+
+        return y_q
 
 class ConvBNReLU(nn.Module):
     def __init__(
