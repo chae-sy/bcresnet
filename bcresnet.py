@@ -215,14 +215,11 @@ class BCResNets(nn.Module):
     def __init__(self, base_c, num_classes=12):
         super().__init__()
         self.num_classes = num_classes
-        self.n = [2, 2, 4, 4]  # identical modules repeated n times
+        self.n = [1]  # identical modules repeated n times
         self.c = [
-            base_c * 2,
+        
             base_c,
-            int(base_c * 1.5),
-            base_c * 2,
-            int(base_c * 2.5),
-            base_c * 4,
+            base_c*2
         ]  # num channels
         self.s = [1, 2]  # stage using stride
         self._build_network()
@@ -230,7 +227,7 @@ class BCResNets(nn.Module):
     def _build_network(self):
         # Head: (Conv-BN-ReLU)
         self.cnn_head = nn.Sequential(
-            nn.Conv2d(1, self.c[0], 5, (2, 1), 2, bias=False),
+            nn.Conv2d(1, self.c[0], 5, (2, 1), 2, bias=True),
             nn.BatchNorm2d(self.c[0]),
             #nn.ReLU(True),
             PACTActivation(k=8, alpha_init=10.0)
@@ -244,9 +241,9 @@ class BCResNets(nn.Module):
         # Classifier
         self.classifier = nn.Sequential(
             nn.Conv2d(
-                self.c[-2], self.c[-2], (5, 5), bias=False, groups=self.c[-2], padding=(0, 2)
+                self.c[-1], self.c[-1], (5, 5), bias=True, groups=self.c[-1], padding=(0, 2)
             ),
-            nn.Conv2d(self.c[-2], self.c[-1], 1, bias=False),
+            nn.Conv2d(self.c[-1], self.c[-1], 1, bias=True),
             nn.BatchNorm2d(self.c[-1]),
             PACTActivation(k=8, alpha_init=10.0),
             #nn.ReLU(True),
