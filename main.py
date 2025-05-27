@@ -13,7 +13,7 @@ from torch.utils.data import DataLoader
 from torchvision import transforms
 from tqdm import tqdm
 
-from bcresnet import BCResNets
+from bcresnet import BCResNets, PACTActivation
 from utils import DownloadDataset, Padding, Preprocess, SpeechCommand, SplitDataset
 
 
@@ -84,6 +84,11 @@ class Trainer:
                 loss.backward()
                 optimizer.step()
                 self.model.zero_grad()
+
+             ## ---- PACT ---- ##
+            for name, m in self.model.named_modules():
+                if isinstance(m, PACTActivation):
+                    print(f"epoch {epoch:02d} │ {name}.alpha = {m.alpha.item():.4f}")
 
             # valid
             print("cur lr check ... %.4f" % lr)
@@ -163,6 +168,7 @@ class Trainer:
         # Define data loaders
         train_dir = "%s/train_12class" % base_dir
         valid_dir = "%s/valid_12class" % base_dir
+        test_dir = "%s/test_12class" % base_dir
         noise_dir = "%s/_background_noise_" % base_dir
         batch_size=250
 
