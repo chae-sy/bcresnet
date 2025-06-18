@@ -1,6 +1,6 @@
 # Copyright (c) 2023 Qualcomm Technologies, Inc.
 # All Rights Reserved.
-
+#
 import os
 import random
 from glob import glob
@@ -99,10 +99,10 @@ class Preprocess:
         self,
         noise_loc,
         device,
-        hop_length=160,
-        win_length=480,
-        n_fft=512,
-        n_mels=40,
+        hop_length=512,
+        win_length=1024,
+        n_fft=1024,
+        n_mels=20,
         specaug=False,
         sample_rate=SR,
         frequency_masking_para=7,
@@ -164,6 +164,18 @@ class Preprocess:
                 x[idx] = torch.clamp(x[idx], -1.0, 1.0)
 
         x = self.feature(x)
+        self.target_frames = 30
+        T = x.shape[-1]
+        # cutting into 30 frames
+        if T > self.target_frames:
+            x = x[..., : self.target_frames]
+        elif T < self.target_frames:
+            # if shorter than 30 frames
+            pad_len = self.target_frames - T
+            pad = torch.zeros(*x.shape[:-1], pad_len, device=x.device, dtype=x.dtype)
+            x = torch.cat([x, pad], dim=-1)
+            pass
+
         if self.specaug:
             for i in range(x.shape[0]):
                 x[i] = spec_augment(

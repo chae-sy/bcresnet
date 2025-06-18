@@ -12,8 +12,9 @@ import torch.nn.functional as F
 from torch.utils.data import DataLoader, random_split
 from torchvision import transforms, datasets
 from tqdm import tqdm
+import torchvision
 
-from bcresnet import BCResNets, PACTActivation
+from bcresnet import BCResNets
 from utils import DownloadDataset, Padding, Preprocess, SpeechCommand, SplitDataset
 
 
@@ -26,7 +27,7 @@ class Trainer:
         """
         parser = ArgumentParser()
         parser.add_argument(
-            "--ver", default=1, help="google speech command set version 1 or 2", type=int
+            "--ver", default=2, help="google speech command set version 1 or 2", type=int
         )
         parser.add_argument(
             "--tau", default=1, help="model size", type=float, choices=[1, 1.5, 2, 3, 6, 8]
@@ -78,7 +79,7 @@ class Trainer:
                 inputs, labels = sample
                 inputs = inputs.to(self.device)
                 labels = labels.to(self.device)
-                #inputs = self.preprocess_train(inputs, labels, augment=True)
+                inputs = self.preprocess_train(inputs, labels, augment=True)
                 outputs = self.model(inputs)
                 loss = F.cross_entropy(outputs, labels)
                 loss.backward()
@@ -93,9 +94,6 @@ class Trainer:
                 print("valid acc: %.3f" % (valid_acc))\
                 
             ## ---- PACT ---- ##
-            for name, m in self.model.named_modules():
-                if isinstance(m, PACTActivation):
-                    print(f"epoch {epoch:02d} │ {name}.alpha = {m.alpha.item():.4f}")
 
         test_acc = self.Test(self.test_dataset, self.test_loader, augment=True)  # official testset
         print("test acc: %.3f" % (test_acc))
@@ -119,7 +117,7 @@ class Trainer:
         for inputs, labels in loader:
             inputs = inputs.to(self.device)
             labels = labels.to(self.device)
-            #inputs = self.preprocess_test(inputs, labels=labels, is_train=False, augment=augment)
+            inputs = self.preprocess_test(inputs, labels=labels, is_train=False, augment=augment)
             outputs = self.model(inputs)
             prediction = torch.argmax(outputs, dim=-1)
             true_count += torch.sum(prediction == labels).detach().cpu().numpy()
@@ -141,69 +139,65 @@ class Trainer:
         """
         Private method that loads data into the object.
         Downloads and splits the data if necessary.
-         """
-        # 1) Transform 정의
-        transform = transforms.Compose([
-            transforms.Resize((40, 101)),
-            transforms.ToTensor(),
-        ])
+        """
+        print("Check google speech commands dataset v1 or v2 ...")
+        if not os.path.isdir("./data"):
+            os.mkdir("./data")
+        base_dir = "./data/speech_commands_v0.01"
+        url = "https://storage.googleapis.com/download.tensorflow.org/data/speech_commands_v0.01.tar.gz"
+        url_test = "https://storage.googleapis.com/download.tensorflow.org/data/speech_commands_test_set_v0.01.tar.gz"
+        if self.ver == 2:
+            base_dir = base_dir.replace("v0.01", "v0.02")
+            url = url.replace("v0.01", "v0.02")
+            url_test = url_test.replace("v0.01", "v0.02")
+        test_dir = base_dir.replace("commands", "commands_test_set")
+        if self.download:
+            old_dirs = glob(base_dir.replace("commands_", "commands_*"))
+            for old_dir in old_dirs:
+                shutil.rmtree(old_dir)
+            os.mkdir(test_dir)
+            DownloadDataset(test_dir, url_test)
+            os.mkdir(base_dir)
+            DownloadDataset(base_dir, url)
+            SplitDataset(base_dir)
+            print("Done...")
 
-        # 2) 전체 학습 데이터 다운로드 및 train/val split
-        full_train_dataset = datasets.MNIST(
-            root='./data',
-            train=True,
-            download=True,
-            transform=transform
-        )
-        total_train = len(full_train_dataset)
-        val_size = int(total_train * 0.1)
-        train_size = total_train - val_size
+        # Define data loaders
+        train_dir = "%s/train_12class" % base_dir
+        valid_dir = "%s/valid_12class" % base_dir
+        test_dir = "%s/test_12class" % base_dir
+        noise_dir = "%s/_background_noise_" % base_dir
+        batch_size=250
 
-        self.train_dataset, self.valid_dataset = random_split(
-            full_train_dataset,
-            [train_size, val_size],
-            generator=torch.Generator().manual_seed(42)
-        )
-
-        # 3) 테스트 데이터셋
-        self.test_dataset = datasets.MNIST(
-            root='./data',
-            train=False,
-            download=True,
-            transform=transform
-        )
-
-        # 4) DataLoader 설정
-        batch_size = 64
-        num_workers = 2
-
+        transform = transforms.Compose([Padding()])
+        self.train_dataset = SpeechCommand(train_dir, self.ver, transform=transform)
         self.train_loader = DataLoader(
-            self.train_dataset,
-            batch_size=batch_size,
-            shuffle=True,
-            num_workers=num_workers
+            self.train_dataset, batch_size=batch_size, shuffle=True, num_workers=0, drop_last=False
         )
-        self.valid_loader = DataLoader(
-            self.valid_dataset,
-            batch_size=batch_size,
-            shuffle=False,
-            num_workers=num_workers
-        )
-        self.test_loader = DataLoader(
-            self.test_dataset,
-            batch_size=batch_size,
-            shuffle=False,
-            num_workers=num_workers
+        self.valid_dataset = SpeechCommand(valid_dir, self.ver, transform=transform)
+        self.valid_loader = DataLoader(self.valid_dataset, batch_size=batch_size, num_workers=0)
+        self.test_dataset = SpeechCommand(test_dir, self.ver, transform=transform)
+        self.test_loader = DataLoader(self.test_dataset, batch_size=batch_size, num_workers=0)
+
+        print(
+            "check num of data train/valid/test %d/%d/%d"
+            % (len(self.train_dataset), len(self.valid_dataset), len(self.test_dataset))
         )
 
-        # 5) 로더 배치 확인
-        for loader, name in zip(
-            [self.train_loader, self.valid_loader, self.test_loader],
-            ['Train', 'Validation', 'Test']
-        ):
-            images, labels = next(iter(loader))
-            print(f"{name} loader batch shape: {images.shape}")
-            # 예: torch.Size([64, 1, 40, 101])
+        specaugment = self.tau >= 1.5
+        frequency_masking_para = {1: 0, 1.5: 1, 2: 3, 3: 5, 6: 7, 8: 7}
+
+        # Define preprocessors
+        self.preprocess_train = Preprocess(
+            noise_dir,
+            self.device,
+            specaug=specaugment,
+            frequency_masking_para=frequency_masking_para[self.tau],
+        )
+        self.preprocess_test = Preprocess(noise_dir, self.device)   
+    
+
+
     def _load_model(self):
         """
         Private method that loads the model into the object.
