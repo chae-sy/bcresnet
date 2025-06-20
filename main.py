@@ -112,16 +112,23 @@ class Trainer:
         Returns:
             float: The accuracy of the model on the given dataset.
         """
+        label=[]
+        input=[] 
         true_count = 0.0
         num_testdata = float(len(dataset))
         for inputs, labels in loader:
             inputs = inputs.to(self.device)
             labels = labels.to(self.device)
             inputs = self.preprocess_test(inputs, labels=labels, is_train=False, augment=augment)
+            input.append(inputs)
+            label.append(labels)
             outputs = self.model(inputs)
             prediction = torch.argmax(outputs, dim=-1)
             true_count += torch.sum(prediction == labels).detach().cpu().numpy()
         acc = true_count / num_testdata * 100.0  # percentage
+        input_tensor = torch.cat([data for data in input], dim=0)
+        torch.save(input, 'val_data_input_20x30.pt')
+        torch.save(label, 'val_data_label_20x30.pt')
         return acc
 
     def save_model(self, model):
