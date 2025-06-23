@@ -116,6 +116,7 @@ class Trainer:
         """
         true_count = 0.0
         num_testdata = float(len(dataset))
+        torch.save(dataset, '40x101_mnist.pt')
         for inputs, labels in loader:
             inputs = inputs.to(self.device)
             labels = labels.to(self.device)
