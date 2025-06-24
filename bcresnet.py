@@ -169,7 +169,6 @@ class BCResBlock(nn.Module):
                 idx,
                 (1, kernel_size[1]),
                 (1, stride[1]),
-                groups=out_plane,
                 swish=True,
                 use_dilation=True,
             ),
