@@ -122,11 +122,11 @@ class ConvBNReLU(nn.Module):
         elif BN:
             layers.append(nn.BatchNorm2d(out_plane))
         if swish:
-            layers.append(PACTActivation(k=8, alpha_init=10.0))
-            #layers.append(nn.SiLU(True))
+            #layers.append(PACTActivation(k=8, alpha_init=10.0))
+            layers.append(nn.ReLU6(True))
         elif activation:
-            layers.append(PACTActivation(k=8, alpha_init=10.0))
-            #layers.append(nn.ReLU(True))
+            #layers.append(PACTActivation(k=8, alpha_init=10.0))
+            layers.append(nn.ReLU6(True))
         self.block = nn.Sequential(*layers)
         
         self.apply(_weights_init)
@@ -229,8 +229,8 @@ class BCResNets(nn.Module):
         self.cnn_head = nn.Sequential(
             nn.Conv2d(1, self.c[0], 5, (2, 1), 2, bias=True),
             nn.BatchNorm2d(self.c[0]),
-            #nn.ReLU(True),
-            PACTActivation(k=8, alpha_init=10.0)
+            nn.ReLU6(True),
+            #PACTActivation(k=8, alpha_init=10.0)
         )
         # Body: BC-ResBlocks
         self.BCBlocks = nn.ModuleList([])
@@ -245,8 +245,8 @@ class BCResNets(nn.Module):
             ),
             nn.Conv2d(self.c[-1], self.c[-1], 1, bias=True),
             nn.BatchNorm2d(self.c[-1]),
-            PACTActivation(k=8, alpha_init=10.0),
-            #nn.ReLU(True),
+            #PACTActivation(k=8, alpha_init=10.0),
+            nn.ReLU6(True),
             nn.AdaptiveAvgPool2d((1, 1)),
             nn.Conv2d(self.c[-1], self.num_classes, 1),
         )
