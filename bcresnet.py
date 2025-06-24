@@ -195,10 +195,10 @@ class BCResBlock(nn.Module):
         x = x + aux_2d_res
         if not self.transition_block:
             x = x + shortcut
-        #x = F.relu(x, True)
+        x = F.relu(x, True)
 
         ## ----- PACT ----- ##
-        x = self.ActFn(x, self.alpha1)
+        #x = self.ActFn(x, self.alpha1)
         return x
 
 
