@@ -173,6 +173,7 @@ class BCResBlock(nn.Module):
                 use_dilation=True,
             ),
             nn.Conv2d(out_plane, out_plane, 1, bias=True),
+            nn.BatchNorm2d(out_plane),
             nn.Dropout2d(0.1),
         )
         
