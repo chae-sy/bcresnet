@@ -91,7 +91,7 @@ class BCResBlock(nn.Module):
                 groups=in_plane,
                 use_dilation=False,
                 ssn=True, # modified
-                activation=True,
+                activation=False,
             )
         )
         self.f2 = nn.Sequential(*layers)
@@ -112,7 +112,7 @@ class BCResBlock(nn.Module):
             nn.Conv2d(out_plane, out_plane, 1, bias=True), # is this necessary?
             nn.Dropout2d(0.1),
         )
-        self.extra_conv=nn.Conv2d(out_plane, out_plane, (1,3), groups=out_plane, bias=True)
+        self.extra_conv=nn.Sequential(nn.Conv2d(out_plane, out_plane, (1,3), groups=out_plane, bias=True), nn.BatchNorm2d(out_plane), nn.ReLU6())
     def forward(self, x):
         # 2D part
         shortcut = x
